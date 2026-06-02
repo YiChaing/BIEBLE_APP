@@ -1,10 +1,13 @@
 {
   "name": "bieble-tracker",
-  "version": "1.0.0",
-  "description": "聖經追蹤器 - 365天讀經打卡與排行榜",
+  "version": "2.0.0",
+  "description": "聖經追蹤器 - Firebase Auth + Firestore",
   "scripts": {
     "start": "node server.js",
     "fetch-plan": "node scripts/fetch-reading-plan.js"
+  },
+  "dependencies": {
+    "firebase-admin": "^13.0.2"
   },
   "engines": {
     "node": ">=18"

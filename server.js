@@ -2,13 +2,16 @@ const http = require("http");
 const fs = require("fs");
 const path = require("path");
 const { URL } = require("url");
+const { isConfigured, getPublicConfig } = require("./lib/firebase-admin");
+const { getUserByToken } = require("./lib/auth");
 const {
-  registerUser,
-  loginUser,
-  logoutUser,
-  getUserByToken,
-} = require("./lib/auth");
-const { getUsers, getCheckins, saveCheckins } = require("./lib/db");
+  getUsers,
+  getCheckins,
+  findCheckinToday,
+  addCheckin,
+  createUserProfile,
+  isUsernameTaken,
+} = require("./lib/firestore");
 const { getReadingPlan, getPlanDayForDate, getDayEntry } = require("./lib/plan");
 const {
   monthKey,
@@ -57,9 +60,7 @@ function parseBody(req) {
 function getToken(req) {
   const auth = req.headers.authorization;
   if (auth && auth.startsWith("Bearer ")) return auth.slice(7);
-  const cookie = req.headers.cookie || "";
-  const m = cookie.match(/session=([^;]+)/);
-  return m ? decodeURIComponent(m[1]) : null;
+  return null;
 }
 
 function json(res, status, data, extraHeaders = {}) {
@@ -70,62 +71,57 @@ function json(res, status, data, extraHeaders = {}) {
   res.end(JSON.stringify(data));
 }
 
-function setSessionCookie(res, token) {
-  const maxAge = 30 * 24 * 60 * 60;
-  return `session=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}`;
-}
-
-function clearSessionCookie() {
-  return "session=; Path=/; HttpOnly; Max-Age=0";
-}
-
 async function handleApi(req, res, pathname) {
   const token = getToken(req);
-  const user = getUserByToken(token);
+  let user = null;
+  if (token) {
+    try {
+      user = await getUserByToken(token);
+    } catch (e) {
+      return json(res, 500, { error: e.message });
+    }
+  }
 
   if (pathname === "/api/health" && req.method === "GET") {
-    return json(res, 200, { ok: true, name: "聖經追蹤器" });
+    return json(res, 200, {
+      ok: true,
+      name: "聖經追蹤器",
+      firebase: isConfigured(),
+    });
   }
 
-  if (pathname === "/api/auth/register" && req.method === "POST") {
+  if (pathname === "/api/firebase-config" && req.method === "GET") {
+    const config = getPublicConfig();
+    if (!config.apiKey || !config.projectId) {
+      return json(res, 503, { error: "Firebase 尚未設定" });
+    }
+    return json(res, 200, config);
+  }
+
+  if (pathname === "/api/auth/check-username" && req.method === "GET") {
+    const url = new URL(req.url, `http://localhost:${PORT}`);
+    const username = (url.searchParams.get("username") || "").trim().toLowerCase();
+    if (username.length < 2) {
+      return json(res, 400, { error: "帳號至少需要 2 個字元" });
+    }
+    const taken = await isUsernameTaken(username);
+    return json(res, 200, { available: !taken });
+  }
+
+  if (pathname === "/api/users/setup" && req.method === "POST") {
+    if (!user) return json(res, 401, { error: "請先登入" });
     try {
       const body = await parseBody(req);
-      const result = registerUser(body);
-      if (!result.ok) return json(res, 400, result);
-      const login = loginUser({
-        username: body.username,
-        password: body.password,
-      });
-      return json(
-        res,
-        201,
-        { user: login.user },
-        { "Set-Cookie": setSessionCookie(res, login.token) }
-      );
+      const username = (body.username || "").trim().toLowerCase();
+      const displayName = (body.displayName || username).trim();
+      if (username.length < 2) {
+        return json(res, 400, { error: "帳號至少需要 2 個字元" });
+      }
+      const profile = await createUserProfile(user.id, { username, displayName });
+      return json(res, 201, { user: profile });
     } catch (e) {
       return json(res, 400, { error: e.message });
     }
-  }
-
-  if (pathname === "/api/auth/login" && req.method === "POST") {
-    try {
-      const body = await parseBody(req);
-      const result = loginUser(body);
-      if (!result.ok) return json(res, 401, result);
-      return json(
-        res,
-        200,
-        { user: result.user },
-        { "Set-Cookie": setSessionCookie(res, result.token) }
-      );
-    } catch (e) {
-      return json(res, 400, { error: e.message });
-    }
-  }
-
-  if (pathname === "/api/auth/logout" && req.method === "POST") {
-    logoutUser(token);
-    return json(res, 200, { ok: true }, { "Set-Cookie": clearSessionCookie() });
   }
 
   if (pathname === "/api/auth/me" && req.method === "GET") {
@@ -156,22 +152,19 @@ async function handleApi(req, res, pathname) {
   }
 
   if (pathname === "/api/checkin" && req.method === "POST") {
-    if (!user) return json(res, 401, { error: "請先登入" });
+    if (!user || user.needsProfile) {
+      return json(res, 401, { error: "請先完成註冊並登入" });
+    }
     try {
       const plan = await getReadingPlan();
       const planDay = getPlanDayForDate();
       const todayStr = new Date().toISOString().slice(0, 10);
-      const checkins = getCheckins();
-      const exists = checkins.find(
-        (c) =>
-          c.userId === user.id && c.date === todayStr && c.planDay === planDay
-      );
+      const exists = await findCheckinToday(user.id, todayStr);
       if (exists) {
         return json(res, 409, { error: "今日已完成打卡" });
       }
       const entry = getDayEntry(plan, planDay);
       const record = {
-        id: require("crypto").randomUUID(),
         userId: user.id,
         date: todayStr,
         planDay,
@@ -179,9 +172,8 @@ async function handleApi(req, res, pathname) {
         newTestament: entry?.newTestament || "",
         createdAt: new Date().toISOString(),
       };
-      checkins.push(record);
-      saveCheckins(checkins);
-      return json(res, 201, { ok: true, checkin: record });
+      const saved = await addCheckin(record);
+      return json(res, 201, { ok: true, checkin: saved });
     } catch (e) {
       return json(res, 500, { error: e.message });
     }
@@ -189,23 +181,23 @@ async function handleApi(req, res, pathname) {
 
   if (pathname === "/api/dashboard" && req.method === "GET") {
     try {
-      archivePastMonths();
+      await archivePastMonths();
       const plan = await getReadingPlan();
       const planDay = getPlanDayForDate();
       const todayEntry = getDayEntry(plan, planDay);
-      const users = getUsers();
-      const checkins = getCheckins();
+      const users = await getUsers();
+      const checkins = await getCheckins();
       const ym = monthKey();
       const leaderboard = buildLeaderboard(users, checkins, ym);
       const top3 = getTop3(leaderboard);
       const progress = getAllProgress(users, checkins, planDay);
-      const winners = getMonthlyWinners();
+      const winners = await getMonthlyWinners();
       const prevMonth = (() => {
         const d = new Date();
         d.setMonth(d.getMonth() - 1);
         return monthKey(d);
       })();
-      ensureMonthlyWinnersRecorded(prevMonth);
+      await ensureMonthlyWinnersRecorded(prevMonth);
 
       return json(res, 200, {
         planDay,
@@ -219,7 +211,7 @@ async function handleApi(req, res, pathname) {
         monthlyTop3: top3,
         allProgress: progress,
         monthlyWinners: winners.slice(-12).reverse(),
-        currentUser: user || null,
+        currentUser: user && !user.needsProfile ? user : null,
       });
     } catch (e) {
       return json(res, 500, { error: e.message });
@@ -268,23 +260,32 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (pathname.startsWith("/api/")) {
+    if (!isConfigured()) {
+      return json(res, 503, {
+        error: "Firebase 尚未設定，請設定 FIREBASE_* 環境變數",
+      });
+    }
     return handleApi(req, res, pathname);
   }
   serveStatic(req, res, pathname);
 });
 
 async function bootstrap() {
+  if (!isConfigured()) {
+    console.error("\n❌ 請設定 Firebase 環境變數，參考 .env.example 與 FIREBASE_SETUP.md\n");
+    process.exit(1);
+  }
+
   try {
-    console.log("正在同步 365 天讀經計劃（首次可能需要幾秒）…");
+    console.log("正在同步 365 天讀經計劃…");
     await getReadingPlan();
     console.log("讀經計劃已就緒");
   } catch (e) {
     console.warn("讀經計劃載入警告:", e.message);
-    console.warn("請執行: node scripts/fetch-reading-plan.js");
   }
 
   server.listen(PORT, HOST, () => {
-    console.log(`\n📖 聖經追蹤器已啟動`);
+    console.log(`\n📖 聖經追蹤器已啟動（Firebase）`);
     console.log(`   監聽 ${HOST}:${PORT}\n`);
   });
 }

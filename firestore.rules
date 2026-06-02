@@ -1,0 +1,9 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 所有讀寫由後端 Admin SDK 處理，前端不直接存取 Firestore
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

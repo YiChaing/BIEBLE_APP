@@ -1,8 +1,11 @@
 const API = "";
+const AUTH_EMAIL_DOMAIN = "bieble.app";
 
+let auth = null;
 let authMode = "login";
 let currentUser = null;
 let dashboardData = null;
+let refreshTimer = null;
 
 const $ = (id) => document.getElementById(id);
 
@@ -13,15 +16,55 @@ function showToast(msg) {
   setTimeout(() => el.classList.add("hidden"), 2800);
 }
 
+function usernameToEmail(username) {
+  const safe = username.trim().toLowerCase().replace(/[^a-z0-9._-]/g, "");
+  if (safe.length < 2) throw new Error("帳號至少需要 2 個字元");
+  return `${safe}@${AUTH_EMAIL_DOMAIN}`;
+}
+
+function mapFirebaseError(err) {
+  const code = err?.code || "";
+  const map = {
+    "auth/email-already-in-use": "此帳號已被使用",
+    "auth/invalid-email": "帳號格式不正確",
+    "auth/weak-password": "密碼至少需要 6 個字元",
+    "auth/user-not-found": "帳號或密碼錯誤",
+    "auth/wrong-password": "帳號或密碼錯誤",
+    "auth/invalid-credential": "帳號或密碼錯誤",
+    "auth/too-many-requests": "嘗試次數過多，請稍後再試",
+  };
+  return map[code] || err?.message || "操作失敗";
+}
+
+async function getIdToken() {
+  if (!auth?.currentUser) return null;
+  return auth.currentUser.getIdToken();
+}
+
 async function api(path, options = {}) {
-  const res = await fetch(API + path, {
-    credentials: "include",
-    headers: { "Content-Type": "application/json", ...options.headers },
-    ...options,
-  });
+  const headers = {
+    "Content-Type": "application/json",
+    ...options.headers,
+  };
+  const token = await getIdToken();
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  const res = await fetch(API + path, { ...options, headers });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || "請求失敗");
   return data;
+}
+
+async function initFirebase() {
+  const config = await fetch(`${API}/api/firebase-config`).then((r) => {
+    if (!r.ok) throw new Error("無法載入 Firebase 設定");
+    return r.json();
+  });
+  if (!firebase.apps.length) {
+    firebase.initializeApp(config);
+  }
+  auth = firebase.auth();
+  auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
 }
 
 function showAuth() {
@@ -55,28 +98,45 @@ $("auth-form").addEventListener("submit", async (e) => {
   const username = $("username").value.trim();
   const password = $("password").value;
   const displayName = $("displayName").value.trim();
+
   try {
     if (authMode === "register") {
-      await api("/api/auth/register", {
+      if (password.length < 6) {
+        throw new Error("密碼至少需要 6 個字元（Firebase 要求）");
+      }
+      const name = username.toLowerCase();
+      const { available } = await api(
+        `/api/auth/check-username?username=${encodeURIComponent(name)}`
+      );
+      if (!available) throw new Error("此帳號已被使用");
+
+      const email = usernameToEmail(username);
+      const cred = await auth.createUserWithEmailAndPassword(email, password);
+      await cred.user.updateProfile({
+        displayName: displayName || username,
+      });
+      await api("/api/users/setup", {
         method: "POST",
-        body: JSON.stringify({ username, password, displayName }),
+        body: JSON.stringify({
+          username: name,
+          displayName: displayName || username,
+        }),
       });
       showToast("註冊成功，歡迎加入！");
     } else {
-      await api("/api/auth/login", {
-        method: "POST",
-        body: JSON.stringify({ username, password }),
-      });
+      const email = usernameToEmail(username);
+      await auth.signInWithEmailAndPassword(email, password);
     }
-    await initApp();
+    await enterDashboard();
   } catch (err) {
-    $("auth-error").textContent = err.message;
+    $("auth-error").textContent = mapFirebaseError(err);
   }
 });
 
 $("logout-btn").addEventListener("click", async () => {
-  await api("/api/auth/logout", { method: "POST" }).catch(() => {});
+  await auth.signOut();
   currentUser = null;
+  if (refreshTimer) clearInterval(refreshTimer);
   showAuth();
 });
 
@@ -233,17 +293,37 @@ async function loadDashboard() {
   renderDashboard(data);
 }
 
+async function enterDashboard() {
+  const { user } = await api("/api/auth/me");
+  if (user.needsProfile) {
+    throw new Error("帳號資料未完成，請重新註冊");
+  }
+  currentUser = user;
+  showDashboard();
+  await loadDashboard();
+  if (refreshTimer) clearInterval(refreshTimer);
+  refreshTimer = setInterval(loadDashboard, 30000);
+}
+
 async function initApp() {
   try {
-    const { user } = await api("/api/auth/me");
-    currentUser = user;
-    showDashboard();
-    await loadDashboard();
-    setInterval(loadDashboard, 30000);
-  } catch {
-    currentUser = null;
+    await initFirebase();
+    auth.onAuthStateChanged(async (fbUser) => {
+      if (fbUser) {
+        try {
+          await enterDashboard();
+        } catch {
+          showAuth();
+        }
+      } else {
+        currentUser = null;
+        showAuth();
+        setAuthMode("login");
+      }
+    });
+  } catch (err) {
+    $("auth-error").textContent = err.message;
     showAuth();
-    setAuthMode("login");
   }
 }
 

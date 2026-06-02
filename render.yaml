@@ -1,4 +1,4 @@
-# Render Blueprint — 在 https://dashboard.render.com 選 New > Blueprint 並連結此 repo
+# Render Blueprint
 services:
   - type: web
     name: bieble-tracker
@@ -13,7 +13,19 @@ services:
         value: 0.0.0.0
       - key: DATA_DIR
         value: /app/data
-    disk:
-      name: bieble-data
-      mountPath: /app/data
-      sizeGB: 1
+      - key: FIREBASE_API_KEY
+        sync: false
+      - key: FIREBASE_AUTH_DOMAIN
+        sync: false
+      - key: FIREBASE_PROJECT_ID
+        sync: false
+      - key: FIREBASE_STORAGE_BUCKET
+        sync: false
+      - key: FIREBASE_MESSAGING_SENDER_ID
+        sync: false
+      - key: FIREBASE_APP_ID
+        sync: false
+      - key: FIREBASE_CLIENT_EMAIL
+        sync: false
+      - key: FIREBASE_PRIVATE_KEY
+        sync: false
