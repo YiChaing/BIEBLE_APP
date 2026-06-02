@@ -1,0 +1,19 @@
+# Render Blueprint — 在 https://dashboard.render.com 選 New > Blueprint 並連結此 repo
+services:
+  - type: web
+    name: bieble-tracker
+    runtime: docker
+    plan: free
+    region: singapore
+    healthCheckPath: /api/health
+    envVars:
+      - key: PORT
+        value: 3847
+      - key: HOST
+        value: 0.0.0.0
+      - key: DATA_DIR
+        value: /app/data
+    disk:
+      name: bieble-data
+      mountPath: /app/data
+      sizeGB: 1

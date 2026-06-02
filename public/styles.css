@@ -1,0 +1,420 @@
+:root {
+  --bg: #0f1419;
+  --surface: #1a2332;
+  --surface2: #243044;
+  --accent: #c9a227;
+  --accent-dim: #8b7318;
+  --text: #f0ebe3;
+  --muted: #9aa8b8;
+  --success: #3d9a6a;
+  --danger: #c45c5c;
+  --radius: 12px;
+  --font: "Segoe UI", "Microsoft JhengHei", "PingFang TC", sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--font);
+  background: var(--bg);
+  background-image:
+    radial-gradient(ellipse 80% 50% at 50% -20%, rgba(201, 162, 39, 0.12), transparent),
+    radial-gradient(ellipse 60% 40% at 100% 100%, rgba(61, 154, 106, 0.06), transparent);
+  color: var(--text);
+  min-height: 100vh;
+  line-height: 1.6;
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+.container {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 1.5rem;
+}
+
+header.app-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 0 1.5rem;
+  border-bottom: 1px solid var(--surface2);
+  margin-bottom: 1.5rem;
+}
+
+.logo {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--accent);
+  letter-spacing: 0.02em;
+}
+
+.logo span {
+  color: var(--muted);
+  font-weight: 400;
+  font-size: 0.9rem;
+  display: block;
+}
+
+.user-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 0.95rem;
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--surface2);
+  border-radius: var(--radius);
+  padding: 1.25rem 1.5rem;
+  margin-bottom: 1rem;
+}
+
+.card h2 {
+  font-size: 1.1rem;
+  color: var(--accent);
+  margin-bottom: 0.75rem;
+  font-weight: 600;
+}
+
+.card h3 {
+  font-size: 0.95rem;
+  color: var(--muted);
+  margin-bottom: 0.5rem;
+}
+
+.grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+@media (max-width: 768px) {
+  .grid-2 {
+    grid-template-columns: 1fr;
+  }
+}
+
+.passage-box {
+  background: var(--surface2);
+  border-radius: 8px;
+  padding: 1rem;
+  margin-top: 0.5rem;
+}
+
+.passage-box .label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--accent-dim);
+  margin-bottom: 0.35rem;
+}
+
+.passage-box p {
+  font-size: 1.05rem;
+  line-height: 1.7;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: 0.65rem 1.25rem;
+  border: none;
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: transform 0.15s, opacity 0.15s;
+}
+
+.btn:active {
+  transform: scale(0.98);
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, var(--accent), var(--accent-dim));
+  color: #1a1208;
+  font-weight: 600;
+}
+
+.btn-primary:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+.btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-ghost {
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid var(--surface2);
+}
+
+.btn-ghost:hover {
+  color: var(--text);
+  border-color: var(--muted);
+}
+
+.checkin-area {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.badge {
+  display: inline-block;
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  background: var(--surface2);
+  color: var(--muted);
+}
+
+.badge.done {
+  background: rgba(61, 154, 106, 0.25);
+  color: #7dd4a8;
+}
+
+.badge.streak {
+  background: rgba(201, 162, 39, 0.2);
+  color: var(--accent);
+}
+
+/* Auth */
+.auth-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+
+.auth-card {
+  width: 100%;
+  max-width: 400px;
+  background: var(--surface);
+  border: 1px solid var(--surface2);
+  border-radius: var(--radius);
+  padding: 2rem;
+}
+
+.auth-card h1 {
+  text-align: center;
+  color: var(--accent);
+  margin-bottom: 0.25rem;
+}
+
+.auth-card .subtitle {
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.9rem;
+  margin-bottom: 1.5rem;
+}
+
+.form-group {
+  margin-bottom: 1rem;
+}
+
+.form-group label {
+  display: block;
+  font-size: 0.85rem;
+  color: var(--muted);
+  margin-bottom: 0.35rem;
+}
+
+.form-group input {
+  width: 100%;
+  padding: 0.65rem 0.85rem;
+  border: 1px solid var(--surface2);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 1rem;
+}
+
+.form-group input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.form-error {
+  color: var(--danger);
+  font-size: 0.85rem;
+  margin-bottom: 0.75rem;
+  min-height: 1.2em;
+}
+
+.auth-card .btn {
+  width: 100%;
+  margin-top: 0.5rem;
+}
+
+.auth-switch {
+  text-align: center;
+  margin-top: 1.25rem;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+/* Leaderboard */
+.leaderboard-list {
+  list-style: none;
+}
+
+.leaderboard-list li {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.6rem 0;
+  border-bottom: 1px solid var(--surface2);
+}
+
+.leaderboard-list li:last-child {
+  border-bottom: none;
+}
+
+.rank {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 0.85rem;
+  background: var(--surface2);
+  color: var(--muted);
+  flex-shrink: 0;
+}
+
+.rank.gold {
+  background: linear-gradient(135deg, #c9a227, #8b7318);
+  color: #1a1208;
+}
+
+.rank.silver {
+  background: linear-gradient(135deg, #a8b4c4, #6b7a8a);
+  color: #1a2332;
+}
+
+.rank.bronze {
+  background: linear-gradient(135deg, #b87d4b, #7a5230);
+  color: #fff;
+}
+
+.progress-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.progress-table th,
+.progress-table td {
+  padding: 0.55rem 0.5rem;
+  text-align: left;
+  border-bottom: 1px solid var(--surface2);
+}
+
+.progress-table th {
+  color: var(--muted);
+  font-weight: 500;
+  font-size: 0.8rem;
+}
+
+.progress-table tr.me {
+  background: rgba(201, 162, 39, 0.08);
+}
+
+.progress-table tr.me td:first-child {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.top3-podium {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.podium-item {
+  text-align: center;
+  padding: 1rem 0.5rem;
+  background: var(--surface2);
+  border-radius: 8px;
+}
+
+.podium-item .name {
+  font-weight: 600;
+  margin: 0.35rem 0;
+}
+
+.podium-item .count {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.hidden {
+  display: none !important;
+}
+
+.toast {
+  position: fixed;
+  bottom: 1.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 0.75rem 1.25rem;
+  background: var(--surface2);
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  z-index: 100;
+  animation: fadeIn 0.3s;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+.meta-line {
+  font-size: 0.8rem;
+  color: var(--muted);
+  margin-top: 0.5rem;
+}
+
+.winners-history {
+  font-size: 0.9rem;
+}
+
+.winners-history .month-block {
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--surface2);
+}

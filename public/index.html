@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>聖經追蹤器</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <!-- 登入 / 註冊 -->
+  <div id="auth-view" class="auth-page hidden">
+    <div class="auth-card">
+      <h1>📖 聖經追蹤器</h1>
+      <p class="subtitle">365 天讀經 · 每日打卡 · 團隊排行榜</p>
+      <div id="auth-error" class="form-error"></div>
+      <form id="auth-form">
+        <div class="form-group" id="display-name-group">
+          <label for="displayName">顯示名稱</label>
+          <input id="displayName" name="displayName" type="text" placeholder="例：小明" autocomplete="name" />
+        </div>
+        <div class="form-group">
+          <label for="username">帳號</label>
+          <input id="username" name="username" type="text" required placeholder="登入用帳號" autocomplete="username" />
+        </div>
+        <div class="form-group">
+          <label for="password">密碼</label>
+          <input id="password" name="password" type="password" required placeholder="至少 4 個字元" autocomplete="current-password" />
+        </div>
+        <button type="submit" class="btn btn-primary" id="auth-submit">登入</button>
+      </form>
+      <p class="auth-switch">
+        <span id="auth-mode-text">還沒有帳號？</span>
+        <a href="#" id="auth-toggle">立即註冊</a>
+      </p>
+    </div>
+  </div>
+
+  <!-- 主儀表板 -->
+  <div id="dashboard-view" class="hidden">
+    <div class="container">
+      <header class="app-header">
+        <div class="logo">
+          📖 聖經追蹤器
+          <span>與大家一起完成一年讀經計劃</span>
+        </div>
+        <div class="user-bar">
+          <span id="user-greeting"></span>
+          <button type="button" class="btn btn-ghost" id="logout-btn">登出</button>
+        </div>
+      </header>
+
+      <section class="card" id="today-card">
+        <h2>今日讀經 · 第 <span id="plan-day">—</span> 天</h2>
+        <div class="grid-2">
+          <div class="passage-box">
+            <div class="label">舊約</div>
+            <p id="ot-passage">載入中…</p>
+          </div>
+          <div class="passage-box">
+            <div class="label">新約</div>
+            <p id="nt-passage">載入中…</p>
+          </div>
+        </div>
+        <div class="checkin-area">
+          <button type="button" class="btn btn-primary" id="checkin-btn">✓ 今日讀經打卡</button>
+          <span id="checkin-status" class="badge">尚未打卡</span>
+        </div>
+        <p class="meta-line" id="plan-meta"></p>
+      </section>
+
+      <div class="grid-2">
+        <section class="card">
+          <h2>本月排行榜</h2>
+          <p class="meta-line">依當月打卡次數排序，每月結算前三名</p>
+          <div id="top3-podium" class="top3-podium"></div>
+          <ul class="leaderboard-list" id="leaderboard-list"></ul>
+        </section>
+
+        <section class="card">
+          <h2>歷月前三名</h2>
+          <div id="winners-history" class="winners-history">
+            <p class="meta-line">每月結束後自動記錄得獎者</p>
+          </div>
+        </section>
+      </div>
+
+      <section class="card">
+        <h2>全員讀經進度</h2>
+        <p class="meta-line">同一畫面查看所有人今日狀態與累計打卡</p>
+        <div style="overflow-x: auto">
+          <table class="progress-table">
+            <thead>
+              <tr>
+                <th>成員</th>
+                <th>今日</th>
+                <th>連續天數</th>
+                <th>累計打卡</th>
+              </tr>
+            </thead>
+            <tbody id="progress-tbody"></tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+  <script src="/app.js"></script>
+</body>
+</html>

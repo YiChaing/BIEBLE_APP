@@ -1,0 +1,35 @@
+# Fly.io 部署設定 — 執行 deploy.ps1 或 fly deploy
+app = 'bieble-tracker'
+primary_region = 'nrt'
+
+[build]
+  dockerfile = 'Dockerfile'
+
+[env]
+  PORT = '3847'
+  HOST = '0.0.0.0'
+  DATA_DIR = '/data'
+
+[http_service]
+  internal_port = 3847
+  force_https = true
+  auto_stop_machines = 'stop'
+  auto_start_machines = true
+  min_machines_running = 0
+  processes = ['app']
+
+  [[http_service.checks]]
+    interval = '30s'
+    timeout = '5s'
+    grace_period = '20s'
+    method = 'GET'
+    path = '/api/health'
+
+[[vm]]
+  memory = '256mb'
+  cpu_kind = 'shared'
+  cpus = 1
+
+[[mounts]]
+  source = 'bieble_data'
+  destination = '/data'

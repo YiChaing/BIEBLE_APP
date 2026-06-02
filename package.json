@@ -1,0 +1,12 @@
+{
+  "name": "bieble-tracker",
+  "version": "1.0.0",
+  "description": "聖經追蹤器 - 365天讀經打卡與排行榜",
+  "scripts": {
+    "start": "node server.js",
+    "fetch-plan": "node scripts/fetch-reading-plan.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
