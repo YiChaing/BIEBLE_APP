@@ -9,8 +9,6 @@ const {
   getCheckins,
   findCheckinToday,
   addCheckin,
-  createUserProfile,
-  isUsernameTaken,
 } = require("./lib/firestore");
 const { getReadingPlan, getPlanDayForDate, getDayEntry } = require("./lib/plan");
 const {
@@ -98,32 +96,6 @@ async function handleApi(req, res, pathname) {
     return json(res, 200, config);
   }
 
-  if (pathname === "/api/auth/check-username" && req.method === "GET") {
-    const url = new URL(req.url, `http://localhost:${PORT}`);
-    const username = (url.searchParams.get("username") || "").trim().toLowerCase();
-    if (username.length < 2) {
-      return json(res, 400, { error: "帳號至少需要 2 個字元" });
-    }
-    const taken = await isUsernameTaken(username);
-    return json(res, 200, { available: !taken });
-  }
-
-  if (pathname === "/api/users/setup" && req.method === "POST") {
-    if (!user) return json(res, 401, { error: "請先登入" });
-    try {
-      const body = await parseBody(req);
-      const username = (body.username || "").trim().toLowerCase();
-      const displayName = (body.displayName || username).trim();
-      if (username.length < 2) {
-        return json(res, 400, { error: "帳號至少需要 2 個字元" });
-      }
-      const profile = await createUserProfile(user.id, { username, displayName });
-      return json(res, 201, { user: profile });
-    } catch (e) {
-      return json(res, 400, { error: e.message });
-    }
-  }
-
   if (pathname === "/api/auth/me" && req.method === "GET") {
     if (!user) return json(res, 401, { error: "請先登入" });
     return json(res, 200, { user });
@@ -152,8 +124,8 @@ async function handleApi(req, res, pathname) {
   }
 
   if (pathname === "/api/checkin" && req.method === "POST") {
-    if (!user || user.needsProfile) {
-      return json(res, 401, { error: "請先完成註冊並登入" });
+    if (!user) {
+      return json(res, 401, { error: "請先使用 Gmail 登入" });
     }
     try {
       const plan = await getReadingPlan();
@@ -211,7 +183,7 @@ async function handleApi(req, res, pathname) {
         monthlyTop3: top3,
         allProgress: progress,
         monthlyWinners: winners.slice(-12).reverse(),
-        currentUser: user && !user.needsProfile ? user : null,
+        currentUser: user || null,
       });
     } catch (e) {
       return json(res, 500, { error: e.message });

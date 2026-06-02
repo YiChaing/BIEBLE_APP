@@ -4,7 +4,7 @@
 
 ## 功能
 
-- Firebase Authentication（帳號登入，密碼至少 6 字元）
+- Firebase Authentication（僅 Gmail / Google 登入）
 - Cloud Firestore（使用者、打卡、每月前三名）
 - 每日舊約／新約經文、全員進度看板
 - 適合 Render Free（**不需持久化 Disk**）
@@ -29,16 +29,15 @@ node server.js
 
 ### 3. 部署到 Render
 
-1. 上傳專案到 GitHub（**不必**上傳 `data/reading-plan-365.json`，建置時會自動下載）
+1. 上傳專案到 GitHub（**必須包含** `seed/reading-plan-365.json` 與最新 `Dockerfile`）
 2. Render 建立 Web Service（Docker）
 3. 在 Environment 貼上所有 `FIREBASE_*` 變數（見 FIREBASE_SETUP.md）
 4. 部署完成
 
 ## 登入說明
 
-- 畫面上填的是 **帳號**（不是 Email）
-- 系統內部使用 `你的帳號@bieble.app` 註冊 Firebase
-- 密碼至少 **6** 個字元
+- 僅支援 **Gmail（Google 帳號）** 一鍵登入
+- 請在 Firebase 啟用 Google 登入，並將 Render 網域加入授權網域
 
 ## 專案結構
 

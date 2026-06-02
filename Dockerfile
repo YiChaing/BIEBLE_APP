@@ -9,14 +9,14 @@ COPY server.js ./
 COPY lib ./lib
 COPY public ./public
 COPY scripts ./scripts
+COPY seed/reading-plan-365.json ./data/reading-plan-365.json
 
 ENV NODE_ENV=production
 ENV PORT=3847
 ENV HOST=0.0.0.0
 ENV DATA_DIR=/app/data
 
-# 建置時從網路抓取 365 天讀經計劃（無需把 JSON 放進 GitHub）
-RUN mkdir -p /app/data && node scripts/fetch-reading-plan.js
+RUN mkdir -p /app/data
 
 EXPOSE 3847
 

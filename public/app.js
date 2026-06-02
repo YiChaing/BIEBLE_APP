@@ -1,10 +1,8 @@
 const API = "";
-const AUTH_EMAIL_DOMAIN = "bieble.app";
 
 let auth = null;
-let authMode = "login";
 let currentUser = null;
-let dashboardData = null;
+let userMap = {};
 let refreshTimer = null;
 
 const $ = (id) => document.getElementById(id);
@@ -16,24 +14,21 @@ function showToast(msg) {
   setTimeout(() => el.classList.add("hidden"), 2800);
 }
 
-function usernameToEmail(username) {
-  const safe = username.trim().toLowerCase().replace(/[^a-z0-9._-]/g, "");
-  if (safe.length < 2) throw new Error("帳號至少需要 2 個字元");
-  return `${safe}@${AUTH_EMAIL_DOMAIN}`;
+function setLoading(show) {
+  $("loading-overlay").classList.toggle("hidden", !show);
 }
 
 function mapFirebaseError(err) {
   const code = err?.code || "";
   const map = {
-    "auth/email-already-in-use": "此帳號已被使用",
-    "auth/invalid-email": "帳號格式不正確",
-    "auth/weak-password": "密碼至少需要 6 個字元",
-    "auth/user-not-found": "帳號或密碼錯誤",
-    "auth/wrong-password": "帳號或密碼錯誤",
-    "auth/invalid-credential": "帳號或密碼錯誤",
-    "auth/too-many-requests": "嘗試次數過多，請稍後再試",
+    "auth/popup-closed-by-user": "已取消登入",
+    "auth/cancelled-popup-request": "請稍候再試",
+    "auth/popup-blocked": "請允許彈出視窗後再試",
+    "auth/account-exists-with-different-credential": "此 Email 已使用其他方式註冊",
+    "auth/network-request-failed": "網路連線失敗",
+    "auth/unauthorized-domain": "此網域未授權，請在 Firebase 加入授權網域",
   };
-  return map[code] || err?.message || "操作失敗";
+  return map[code] || err?.message || "登入失敗";
 }
 
 async function getIdToken() {
@@ -77,59 +72,33 @@ function showDashboard() {
   $("dashboard-view").classList.remove("hidden");
 }
 
-function setAuthMode(mode) {
-  authMode = mode;
-  const isRegister = mode === "register";
-  $("display-name-group").classList.toggle("hidden", !isRegister);
-  $("auth-submit").textContent = isRegister ? "註冊並進入" : "登入";
-  $("auth-mode-text").textContent = isRegister ? "已有帳號？" : "還沒有帳號？";
-  $("auth-toggle").textContent = isRegister ? "返回登入" : "立即註冊";
-  $("auth-error").textContent = "";
+function updateUserHeader(user) {
+  const avatar = $("user-avatar");
+  if (user?.photoURL) {
+    avatar.src = user.photoURL;
+    avatar.alt = user.displayName;
+    avatar.classList.remove("hidden");
+  } else {
+    avatar.classList.add("hidden");
+  }
+  $("user-greeting").textContent = user ? user.displayName : "";
+  $("user-email").textContent = user?.email || "";
 }
 
-$("auth-toggle").addEventListener("click", (e) => {
-  e.preventDefault();
-  setAuthMode(authMode === "login" ? "register" : "login");
-});
-
-$("auth-form").addEventListener("submit", async (e) => {
-  e.preventDefault();
+$("google-login-btn").addEventListener("click", async () => {
   $("auth-error").textContent = "";
-  const username = $("username").value.trim();
-  const password = $("password").value;
-  const displayName = $("displayName").value.trim();
-
+  const btn = $("google-login-btn");
+  btn.disabled = true;
+  setLoading(true);
   try {
-    if (authMode === "register") {
-      if (password.length < 6) {
-        throw new Error("密碼至少需要 6 個字元（Firebase 要求）");
-      }
-      const name = username.toLowerCase();
-      const { available } = await api(
-        `/api/auth/check-username?username=${encodeURIComponent(name)}`
-      );
-      if (!available) throw new Error("此帳號已被使用");
-
-      const email = usernameToEmail(username);
-      const cred = await auth.createUserWithEmailAndPassword(email, password);
-      await cred.user.updateProfile({
-        displayName: displayName || username,
-      });
-      await api("/api/users/setup", {
-        method: "POST",
-        body: JSON.stringify({
-          username: name,
-          displayName: displayName || username,
-        }),
-      });
-      showToast("註冊成功，歡迎加入！");
-    } else {
-      const email = usernameToEmail(username);
-      await auth.signInWithEmailAndPassword(email, password);
-    }
-    await enterDashboard();
+    const provider = new firebase.auth.GoogleAuthProvider();
+    provider.setCustomParameters({ prompt: "select_account" });
+    await auth.signInWithPopup(provider);
   } catch (err) {
     $("auth-error").textContent = mapFirebaseError(err);
+  } finally {
+    btn.disabled = false;
+    setLoading(false);
   }
 });
 
@@ -138,25 +107,38 @@ $("logout-btn").addEventListener("click", async () => {
   currentUser = null;
   if (refreshTimer) clearInterval(refreshTimer);
   showAuth();
+  showToast("已登出");
 });
 
 $("checkin-btn").addEventListener("click", async () => {
+  const btn = $("checkin-btn");
+  btn.disabled = true;
   try {
     await api("/api/checkin", { method: "POST" });
     showToast("打卡成功！願主的話語成為您的力量");
     await loadDashboard();
   } catch (err) {
     showToast(err.message);
+    btn.disabled = false;
   }
 });
 
-function renderDashboard(data) {
-  dashboardData = data;
-  currentUser = data.currentUser;
+function buildUserMap(users) {
+  userMap = {};
+  for (const u of users || []) {
+    userMap[u.userId || u.id] = u;
+  }
+}
 
-  $("user-greeting").textContent = currentUser
-    ? `你好，${currentUser.displayName}`
-    : "訪客（請登入以打卡）";
+function getPhoto(userId) {
+  return userMap[userId]?.photoURL || "";
+}
+
+function renderDashboard(data) {
+  currentUser = data.currentUser;
+  buildUserMap(data.allProgress);
+
+  updateUserHeader(currentUser);
 
   $("plan-day").textContent = data.planDay;
   $("ot-passage").textContent = data.today?.oldTestament || "—";
@@ -164,7 +146,7 @@ function renderDashboard(data) {
 
   const meta = data.planMeta;
   $("plan-meta").textContent = meta
-    ? `計劃：${meta.name || "一年讀一遍"} · 資料更新：${formatDate(meta.updatedAt)} · 來源：DayByWord`
+    ? `計劃：${meta.name || "一年讀一遍"} · 更新：${formatDate(meta.updatedAt)}`
     : "";
 
   const me = data.allProgress?.find((p) => p.userId === currentUser?.id);
@@ -186,7 +168,14 @@ function renderDashboard(data) {
     status.className = "badge";
   }
 
-  renderTop3(data.monthlyTop3);
+  const members = data.allProgress?.length || 0;
+  const todayDone = data.allProgress?.filter((p) => p.checkedToday).length || 0;
+  $("stat-members").textContent = members;
+  $("stat-today-done").textContent = todayDone;
+  $("stat-my-streak").textContent = me?.streak ?? "—";
+  $("stat-my-total").textContent = me?.totalCheckins ?? "—";
+
+  renderTop3(data.monthlyTop3, data.leaderboard);
   renderLeaderboard(data.leaderboard);
   renderProgress(data.allProgress);
   renderWinnersHistory(data.monthlyWinners);
@@ -194,45 +183,72 @@ function renderDashboard(data) {
 
 function formatDate(iso) {
   if (!iso) return "—";
-  const d = new Date(iso);
-  return d.toLocaleString("zh-TW", { dateStyle: "short", timeStyle: "short" });
+  return new Date(iso).toLocaleString("zh-TW", {
+    dateStyle: "short",
+    timeStyle: "short",
+  });
 }
 
-function renderTop3(top3) {
+function avatarHtml(userId, name, size = "avatar") {
+  const url = getPhoto(userId);
+  if (url) {
+    return `<img class="${size}" src="${escapeAttr(url)}" alt="${escapeAttr(name)}" loading="lazy" />`;
+  }
+  const initial = (name || "?").charAt(0).toUpperCase();
+  return `<span class="rank rank-initial">${initial}</span>`;
+}
+
+function escapeAttr(s) {
+  return String(s)
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;");
+}
+
+function renderTop3(top3, fullList) {
   const el = $("top3-podium");
   if (!top3?.length) {
     el.innerHTML = '<p class="meta-line">本月尚無打卡記錄</p>';
     return;
   }
+  const order = [1, 0, 2];
   const medals = ["gold", "silver", "bronze"];
   const labels = ["🥇", "🥈", "🥉"];
-  el.innerHTML = top3
-    .map(
-      (u, i) => `
-    <div class="podium-item">
-      <div class="rank ${medals[i]}">${labels[i]}</div>
-      <div class="name">${escapeHtml(u.displayName)}</div>
-      <div class="count">${u.monthlyCheckins} 次打卡</div>
-    </div>`
-    )
+  el.innerHTML = order
+    .map((idx) => {
+      const u = top3[idx];
+      if (!u) return "";
+      return `
+      <div class="podium-item ${idx === 0 ? "podium-1" : ""}">
+        <div class="podium-medal rank ${medals[idx]}">${labels[idx]}</div>
+        ${avatarHtml(u.userId, u.displayName)}
+        <div class="name">${escapeHtml(u.displayName)}</div>
+        <div class="count">${u.monthlyCheckins} 次</div>
+      </div>`;
+    })
     .join("");
 }
 
 function renderLeaderboard(list) {
   const ul = $("leaderboard-list");
   if (!list?.length) {
-    ul.innerHTML = "<li>尚無成員</li>";
+    ul.innerHTML = '<li class="meta-line">尚無成員</li>';
     return;
   }
   ul.innerHTML = list
     .map((u, i) => {
       const rankClass =
         i === 0 ? "gold" : i === 1 ? "silver" : i === 2 ? "bronze" : "";
+      const photo = getPhoto(u.userId);
+      const av = photo
+        ? `<img class="member-avatar" src="${escapeAttr(photo)}" alt="" loading="lazy" />`
+        : `<span class="rank">${i + 1}</span>`;
       return `
       <li>
-        <span class="rank ${rankClass}">${i + 1}</span>
-        <span>${escapeHtml(u.displayName)}</span>
-        <span style="margin-left:auto;color:var(--muted)">${u.monthlyCheckins} 次</span>
+        ${i < 3 ? `<span class="rank ${rankClass}">${i + 1}</span>` : av}
+        ${i < 3 && photo ? `<img class="member-avatar" src="${escapeAttr(photo)}" alt="" />` : ""}
+        <span class="member-name">${escapeHtml(u.displayName)}</span>
+        <span style="margin-left:auto;color:var(--muted);flex-shrink:0">${u.monthlyCheckins} 次</span>
       </li>`;
     })
     .join("");
@@ -241,15 +257,28 @@ function renderLeaderboard(list) {
 function renderProgress(allProgress) {
   const tbody = $("progress-tbody");
   if (!allProgress?.length) {
-    tbody.innerHTML = '<tr><td colspan="4">尚無成員資料</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="4">尚無成員</td></tr>';
     return;
   }
-  tbody.innerHTML = allProgress
+  const sorted = [...allProgress].sort((a, b) => {
+    if (a.checkedToday !== b.checkedToday) return a.checkedToday ? -1 : 1;
+    return b.totalCheckins - a.totalCheckins;
+  });
+  tbody.innerHTML = sorted
     .map((p) => {
       const isMe = p.userId === currentUser?.id;
+      const photo = p.photoURL || getPhoto(p.userId);
+      const av = photo
+        ? `<img src="${escapeAttr(photo)}" alt="" loading="lazy" />`
+        : "";
       return `
       <tr class="${isMe ? "me" : ""}">
-        <td>${escapeHtml(p.displayName)}${isMe ? "（我）" : ""}</td>
+        <td>
+          <div class="member-cell">
+            ${av}
+            <span>${escapeHtml(p.displayName)}${isMe ? "（我）" : ""}</span>
+          </div>
+        </td>
         <td>${p.checkedToday ? '<span class="badge done">已打卡</span>' : '<span class="badge">未打卡</span>'}</td>
         <td><span class="badge streak">${p.streak} 天</span></td>
         <td>${p.totalCheckins}</td>
@@ -294,34 +323,41 @@ async function loadDashboard() {
 }
 
 async function enterDashboard() {
-  const { user } = await api("/api/auth/me");
-  if (user.needsProfile) {
-    throw new Error("帳號資料未完成，請重新註冊");
+  setLoading(true);
+  try {
+    const { user } = await api("/api/auth/me");
+    currentUser = user;
+    showDashboard();
+    updateUserHeader(user);
+    await loadDashboard();
+    if (refreshTimer) clearInterval(refreshTimer);
+    refreshTimer = setInterval(loadDashboard, 30000);
+  } finally {
+    setLoading(false);
   }
-  currentUser = user;
-  showDashboard();
-  await loadDashboard();
-  if (refreshTimer) clearInterval(refreshTimer);
-  refreshTimer = setInterval(loadDashboard, 30000);
 }
 
 async function initApp() {
+  setLoading(true);
   try {
     await initFirebase();
     auth.onAuthStateChanged(async (fbUser) => {
       if (fbUser) {
         try {
           await enterDashboard();
-        } catch {
+        } catch (err) {
+          console.error(err);
           showAuth();
+          $("auth-error").textContent = err.message || "載入失敗";
         }
       } else {
         currentUser = null;
+        setLoading(false);
         showAuth();
-        setAuthMode("login");
       }
     });
   } catch (err) {
+    setLoading(false);
     $("auth-error").textContent = err.message;
     showAuth();
   }
