@@ -4,7 +4,7 @@
  */
 const fs = require("fs");
 const path = require("path");
-const { toTraditionalPassage } = require("../lib/book-names");
+const { formatPassageDisplay } = require("../lib/passage-parse");
 
 const PLAN_URL = "https://daybyword.org/zh-CN/plans/read-bible-in-a-year";
 const OUT = path.join(__dirname, "..", "data", "reading-plan-365.json");
@@ -35,8 +35,8 @@ function parseDayByWordHtml(html) {
       day: dayNum,
       oldTestamentRaw: ot,
       newTestamentRaw: nt,
-      oldTestament: toTraditionalPassage(ot),
-      newTestament: toTraditionalPassage(nt),
+      oldTestament: formatPassageDisplay(ot),
+      newTestament: formatPassageDisplay(nt),
       source: "daybyword.org",
       fetchedAt: new Date().toISOString(),
     });
