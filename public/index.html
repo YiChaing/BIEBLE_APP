@@ -119,6 +119,32 @@
         <p class="meta-line" id="plan-meta"></p>
       </section>
 
+      <!-- 每日靈修心得（僅自己可見） -->
+      <section class="card devotion-card" id="devotion-section">
+        <div class="devotion-header">
+          <div>
+            <h2>每日靈修心得</h2>
+            <p class="card-desc">🔒 僅您本人可見，不會顯示給其他成員</p>
+          </div>
+          <span id="devotion-saved-hint" class="devotion-saved-hint hidden">已儲存</span>
+        </div>
+        <div id="devotion-guest" class="devotion-guest hidden">
+          <p class="meta-line">請先使用 Gmail 登入，才能記錄個人靈修心得。</p>
+        </div>
+        <div id="devotion-editor" class="devotion-editor hidden">
+          <textarea
+            id="devotion-text"
+            class="devotion-textarea"
+            rows="6"
+            placeholder="記錄今日讀經的感動、禱告、領受…（只有您看得到）"
+          ></textarea>
+          <div class="devotion-actions">
+            <button type="button" class="btn btn-primary btn-sm" id="devotion-save-btn">儲存心得</button>
+            <span id="devotion-updated" class="meta-line"></span>
+          </div>
+        </div>
+      </section>
+
       <!-- 統計摘要 -->
       <div class="stats-row" id="stats-row">
         <div class="stat-card">

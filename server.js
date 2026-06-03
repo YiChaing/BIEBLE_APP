@@ -10,6 +10,8 @@ const {
   findCheckinByUserPlanDay,
   getUserCheckinPlanDays,
   addCheckin,
+  getDevotion,
+  saveDevotion,
 } = require("./lib/firestore");
 const {
   getReadingPlan,
@@ -153,11 +155,13 @@ async function handleApi(req, res, pathname) {
 
       let checked = false;
       let mySuggestedPlanDay = null;
+      let devotion = null;
       if (user) {
         const existing = await findCheckinByUserPlanDay(user.id, planDay);
         checked = Boolean(existing);
         const days = await getUserCheckinPlanDays(user.id);
         mySuggestedPlanDay = getSuggestedPlanDay(days, calendarPlanDay);
+        devotion = await getDevotion(user.id, planDay);
       }
 
       return json(res, 200, {
@@ -169,6 +173,7 @@ async function handleApi(req, res, pathname) {
         planStartDate: PLAN_START_DATE,
         checked,
         mySuggestedPlanDay,
+        devotion,
         isToday: planDay === calendarPlanDay,
         isFuture: planDay > calendarPlanDay,
       });
@@ -190,6 +195,23 @@ async function handleApi(req, res, pathname) {
       return json(res, 200, { planDay, scripture });
     } catch (e) {
       return json(res, 500, { error: "無法載入經文：" + e.message });
+    }
+  }
+
+  if (pathname === "/api/devotion" && req.method === "POST") {
+    if (!user) {
+      return json(res, 401, { error: "請先使用 Gmail 登入" });
+    }
+    try {
+      const body = await parseBody(req);
+      const planDay = resolvePlanDay({
+        date: body.date,
+        planDay: body.planDay,
+      });
+      const saved = await saveDevotion(user.id, planDay, body.content || "");
+      return json(res, 200, { ok: true, devotion: saved });
+    } catch (e) {
+      return json(res, 500, { error: e.message });
     }
   }
 

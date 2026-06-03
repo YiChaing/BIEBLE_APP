@@ -13,11 +13,24 @@
 
 > 可關閉「電子郵件/密碼」，本 App 僅使用 Google 登入。
 
-### 授權網域（重要）
+### 授權網域（重要 — 出現「此網域未授權」時必做）
 
-1. Authentication → **Settings** → **Authorized domains**
-2. 確認已有 `localhost`
-3. 新增你的 Render 網域，例如：`bieble-tracker.onrender.com`
+1. 打開 [Firebase Console](https://console.firebase.google.com/) → 選你的專案
+2. 左側 **Build** → **Authentication**
+3. 上方分頁點 **Settings**（設定，齒輪圖示那一區）
+4. 往下找到 **Authorized domains**（授權網域）
+5. 點 **Add domain**（新增網域）
+6. 輸入你網站的網域（**只填網域，不要加 https:// 或路徑**）
+
+| 你開啟的網址 | 要新增的網域 |
+|--------------|--------------|
+| `https://bieble-tracker.onrender.com` | `bieble-tracker.onrender.com` |
+| `https://xxx.onrender.com` | `xxx.onrender.com`（改成你的服務名稱） |
+| 本機測試 `http://localhost:3847` | `localhost`（通常已內建） |
+
+7. 點 **Add** → 等約 1 分鐘 → 重新整理網頁再點「使用 Gmail 登入」
+
+> 如何確認自己的 Render 網域：Render 服務頁上方會顯示 URL，或看瀏覽器網址列 `https://????.onrender.com` 中間那段。
 
 未加入授權網域會出現 `auth/unauthorized-domain` 錯誤。
 
@@ -53,7 +66,15 @@ Firestore → **規則** → 貼上 `firestore.rules` → **發布**
 | `FIREBASE_CLIENT_EMAIL` | client_email |
 | `FIREBASE_PRIVATE_KEY` | private_key |
 
-Render 貼 private key 時，換行改 `\n`。
+### Render 貼 private key（常見登入失敗原因）
+
+1. 在 JSON 檔複製 `private_key` 整段（含 `-----BEGIN PRIVATE KEY-----`）
+2. 在 Render Environment 新增 `FIREBASE_PRIVATE_KEY`
+3. **建議做法**：貼成**一行**，把真實換行改成 `\n`（反斜線 + n）
+4. 或用雙引號包住整段，例如：`"-----BEGIN PRIVATE KEY-----\nMIIE...\n-----END PRIVATE KEY-----\n"`
+5. `FIREBASE_PROJECT_ID` 必須與前端 `firebaseConfig.projectId` **完全相同**
+
+若 Gmail 登入後仍顯示「請先登入」，多半是 **PRIVATE_KEY 格式錯誤** 或 **專案 ID 不一致**。
 
 ## 7. Render 環境變數
 
@@ -83,5 +104,6 @@ FIREBASE_PRIVATE_KEY=...
 ```
 users/{uid}     → email, displayName, photoURL, provider, createdAt
 checkins/{id}   → userId, date, planDay, oldTestament, newTestament
+devotions/{id}  → userId, planDay, content, createdAt, updatedAt（id = userId_planDay，僅本人 API 可讀寫）
 monthly_winners/{YYYY-MM} → winners[]
 ```

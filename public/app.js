@@ -219,6 +219,37 @@ function renderDayView(day) {
   if (scriptureLoadedFor !== day.planDay) {
     resetScripturePanel();
   }
+
+  renderDevotion(day);
+}
+
+let devotionSaveHintTimer = null;
+
+function renderDevotion(day) {
+  const guest = $("devotion-guest");
+  const editor = $("devotion-editor");
+  const hint = $("devotion-saved-hint");
+
+  hint.classList.add("hidden");
+  if (devotionSaveHintTimer) {
+    clearTimeout(devotionSaveHintTimer);
+    devotionSaveHintTimer = null;
+  }
+
+  if (!currentUser) {
+    guest.classList.remove("hidden");
+    editor.classList.add("hidden");
+    return;
+  }
+
+  guest.classList.add("hidden");
+  editor.classList.remove("hidden");
+
+  const d = day.devotion;
+  $("devotion-text").value = d?.content || "";
+  $("devotion-updated").textContent = d?.updatedAt
+    ? `上次儲存：${formatDate(d.updatedAt)}`
+    : "";
 }
 
 async function loadDay(dateStr) {
@@ -446,6 +477,35 @@ $("logout-btn").addEventListener("click", async () => {
   if (refreshTimer) clearInterval(refreshTimer);
   showAuth();
   showToast("已登出");
+});
+
+$("devotion-save-btn").addEventListener("click", async () => {
+  if (!currentUser || !currentDayData) return;
+  const btn = $("devotion-save-btn");
+  btn.disabled = true;
+  try {
+    const content = $("devotion-text").value;
+    const res = await api("/api/devotion", {
+      method: "POST",
+      body: JSON.stringify({
+        planDay: currentDayData.planDay,
+        content,
+      }),
+    });
+    currentDayData.devotion = res.devotion;
+    $("devotion-updated").textContent = res.devotion?.updatedAt
+      ? `上次儲存：${formatDate(res.devotion.updatedAt)}`
+      : "";
+    const hint = $("devotion-saved-hint");
+    hint.classList.remove("hidden");
+    if (devotionSaveHintTimer) clearTimeout(devotionSaveHintTimer);
+    devotionSaveHintTimer = setTimeout(() => hint.classList.add("hidden"), 2500);
+    showToast("靈修心得已儲存（僅自己可見）");
+  } catch (err) {
+    showToast(err.message);
+  } finally {
+    btn.disabled = false;
+  }
 });
 
 $("checkin-btn").addEventListener("click", async () => {
