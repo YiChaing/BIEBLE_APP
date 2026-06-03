@@ -243,6 +243,175 @@ body {
   padding: 1.5rem 0 2rem;
 }
 
+/* ── 日期導覽 ── */
+.date-bar {
+  padding: 1rem 1.25rem;
+}
+
+.date-bar-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.btn-icon {
+  width: 2.5rem;
+  height: 2.5rem;
+  padding: 0;
+  font-size: 1.5rem;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.date-picker-wrap {
+  flex: 1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1rem;
+}
+
+.date-label {
+  font-size: 0.8rem;
+  color: var(--muted);
+  width: 100%;
+}
+
+.date-input {
+  flex: 1;
+  min-width: 140px;
+  padding: 0.55rem 0.75rem;
+  border: 1px solid var(--surface-border);
+  border-radius: var(--radius-sm);
+  background: rgba(0, 0, 0, 0.25);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 1rem;
+}
+
+.date-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.date-plan-day {
+  font-size: 0.95rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.date-plan-day strong {
+  color: var(--accent);
+  font-size: 1.15rem;
+}
+
+.date-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--surface-border);
+}
+
+.date-hint {
+  font-size: 0.8rem;
+  color: var(--muted);
+  margin-left: auto;
+}
+
+.date-hint.future {
+  color: var(--accent);
+}
+
+.date-hint.catchup {
+  color: var(--success);
+}
+
+/* ── 完整經文 ── */
+.scripture-section {
+  margin-top: 1.25rem;
+  border-top: 1px solid var(--surface-border);
+  padding-top: 1rem;
+}
+
+.scripture-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.65rem 0;
+  background: none;
+  border: none;
+  color: var(--accent);
+  font-family: inherit;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+}
+
+.scripture-toggle:hover {
+  color: var(--text);
+}
+
+.scripture-toggle-icon {
+  display: inline-block;
+  transition: transform 0.2s;
+  font-size: 0.75rem;
+}
+
+.scripture-toggle[aria-expanded="true"] .scripture-toggle-icon {
+  transform: rotate(90deg);
+}
+
+.scripture-full {
+  margin-top: 0.75rem;
+}
+
+.scripture-loading {
+  text-align: center;
+  color: var(--muted);
+  padding: 1rem;
+}
+
+.scripture-block {
+  margin-bottom: 1.25rem;
+}
+
+.scripture-block h3 {
+  font-size: 1rem;
+  color: var(--accent);
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.35rem;
+  border-bottom: 1px solid var(--surface-border);
+}
+
+.scripture-block.nt-block h3 {
+  color: var(--success);
+}
+
+.scripture-verse {
+  margin-bottom: 0.35rem;
+  font-size: 0.95rem;
+  line-height: 1.75;
+}
+
+.scripture-verse .vn {
+  display: inline-block;
+  min-width: 1.75rem;
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.scripture-error {
+  color: var(--danger);
+  font-size: 0.9rem;
+  padding: 0.5rem 0;
+}
+
 /* ── 按鈕 ── */
 .btn {
   display: inline-flex;

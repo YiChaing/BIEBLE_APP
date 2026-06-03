@@ -60,17 +60,35 @@
     </header>
 
     <main class="container main-content">
-      <!-- 今日讀經 -->
+      <!-- 日期導覽 -->
+      <section class="card date-bar" id="date-bar">
+        <div class="date-bar-row">
+          <button type="button" class="btn btn-ghost btn-icon" id="date-prev" title="前一天">‹</button>
+          <div class="date-picker-wrap">
+            <label class="date-label" for="date-input">閱讀日期</label>
+            <input type="date" id="date-input" class="date-input" />
+            <span class="date-plan-day">第 <strong id="plan-day">—</strong> 天</span>
+          </div>
+          <button type="button" class="btn btn-ghost btn-icon" id="date-next" title="後一天">›</button>
+        </div>
+        <div class="date-actions">
+          <button type="button" class="btn btn-ghost btn-sm" id="btn-today">回到今日</button>
+          <button type="button" class="btn btn-ghost btn-sm" id="btn-my-progress">我的進度</button>
+          <span id="date-hint" class="date-hint"></span>
+        </div>
+      </section>
+
+      <!-- 讀經內容 -->
       <section class="card card-hero" id="today-card">
         <div class="card-hero-head">
           <div>
-            <span class="eyebrow">今日讀經</span>
-            <h2>第 <span id="plan-day">—</span> 天</h2>
+            <span class="eyebrow" id="reading-eyebrow">讀經內容</span>
+            <h2 id="reading-title">載入中…</h2>
           </div>
           <div class="checkin-wrap">
             <button type="button" class="btn btn-primary btn-checkin" id="checkin-btn">
               <span class="checkin-icon">✓</span>
-              今日打卡
+              <span id="checkin-btn-text">打卡</span>
             </button>
             <span id="checkin-status" class="badge">尚未打卡</span>
           </div>
@@ -85,6 +103,19 @@
             <p id="nt-passage" class="passage-text">載入中…</p>
           </article>
         </div>
+
+        <!-- 完整經文 -->
+        <div class="scripture-section">
+          <button type="button" class="scripture-toggle" id="scripture-toggle" aria-expanded="false">
+            <span class="scripture-toggle-icon">▶</span>
+            <span>展開當日完整經文</span>
+          </button>
+          <div id="scripture-full" class="scripture-full hidden">
+            <div class="scripture-loading hidden" id="scripture-loading">正在載入經文…</div>
+            <div class="scripture-block" id="scripture-ot"></div>
+            <div class="scripture-block" id="scripture-nt"></div>
+          </div>
+        </div>
         <p class="meta-line" id="plan-meta"></p>
       </section>
 
@@ -96,7 +127,7 @@
         </div>
         <div class="stat-card">
           <span class="stat-value" id="stat-today-done">—</span>
-          <span class="stat-label">今日已打卡</span>
+          <span class="stat-label">今日進度已打卡</span>
         </div>
         <div class="stat-card">
           <span class="stat-value" id="stat-my-streak">—</span>

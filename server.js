@@ -7,10 +7,22 @@ const { getUserByToken } = require("./lib/auth");
 const {
   getUsers,
   getCheckins,
-  findCheckinToday,
+  findCheckinByUserPlanDay,
+  getUserCheckinPlanDays,
   addCheckin,
 } = require("./lib/firestore");
-const { getReadingPlan, getPlanDayForDate, getDayEntry } = require("./lib/plan");
+const {
+  getReadingPlan,
+  getPlanDayForDate,
+  getDateForPlanDay,
+  getCalendarPlanDay,
+  getPlanBounds,
+  getDayEntry,
+  resolvePlanDay,
+  formatDateOnly,
+  PLAN_START_DATE,
+} = require("./lib/plan");
+const { getFullScriptureForDay } = require("./lib/scripture");
 const {
   monthKey,
   buildLeaderboard,
@@ -19,6 +31,7 @@ const {
   getAllProgress,
   getMonthlyWinners,
   ensureMonthlyWinnersRecorded,
+  getSuggestedPlanDay,
 } = require("./lib/stats");
 
 const PORT = Number(process.env.PORT) || 3847;
@@ -69,22 +82,34 @@ function json(res, status, data, extraHeaders = {}) {
   res.end(JSON.stringify(data));
 }
 
+function getQueryParams(req) {
+  return new URL(req.url, `http://localhost:${PORT}`).searchParams;
+}
+
 async function handleApi(req, res, pathname) {
   const token = getToken(req);
   let user = null;
+  let authError = null;
   if (token) {
     try {
       user = await getUserByToken(token);
     } catch (e) {
-      return json(res, 500, { error: e.message });
+      authError = e.message;
+      console.error("Auth error:", e.message);
+      if (pathname === "/api/auth/me") {
+        return json(res, 401, { error: e.message, code: e.code });
+      }
     }
   }
+
+  const qs = getQueryParams(req);
 
   if (pathname === "/api/health" && req.method === "GET") {
     return json(res, 200, {
       ok: true,
       name: "聖經追蹤器",
       firebase: isConfigured(),
+      planStartDate: PLAN_START_DATE,
     });
   }
 
@@ -97,29 +122,74 @@ async function handleApi(req, res, pathname) {
   }
 
   if (pathname === "/api/auth/me" && req.method === "GET") {
-    if (!user) return json(res, 401, { error: "請先登入" });
+    if (!user) {
+      return json(res, 401, {
+        error: authError || (token ? "登入驗證失敗" : "請先使用 Gmail 登入"),
+      });
+    }
     return json(res, 200, { user });
   }
 
-  if (pathname === "/api/reading-plan" && req.method === "GET") {
+  if (pathname === "/api/plan-info" && req.method === "GET") {
+    const bounds = getPlanBounds();
+    const calendarPlanDay = getCalendarPlanDay();
+    return json(res, 200, {
+      ...bounds,
+      calendarPlanDay,
+      calendarDate: formatDateOnly(new Date()),
+    });
+  }
+
+  if (pathname === "/api/day" && req.method === "GET") {
     try {
-      const url = new URL(req.url, `http://localhost:${PORT}`);
-      const refresh = url.searchParams.get("refresh") === "1";
-      const plan = await getReadingPlan(refresh);
-      const planDay = getPlanDayForDate();
-      const today = getDayEntry(plan, planDay);
+      const plan = await getReadingPlan();
+      const planDay = resolvePlanDay({
+        date: qs.get("date"),
+        planDay: qs.get("planDay"),
+      });
+      const date = formatDateOnly(getDateForPlanDay(planDay));
+      const entry = getDayEntry(plan, planDay);
+      const calendarPlanDay = getCalendarPlanDay();
+
+      let checked = false;
+      let mySuggestedPlanDay = null;
+      if (user) {
+        const existing = await findCheckinByUserPlanDay(user.id, planDay);
+        checked = Boolean(existing);
+        const days = await getUserCheckinPlanDays(user.id);
+        mySuggestedPlanDay = getSuggestedPlanDay(days, calendarPlanDay);
+      }
+
       return json(res, 200, {
         planDay,
-        today,
-        meta: {
-          name: plan.name,
-          totalDays: plan.totalDays,
-          updatedAt: plan.updatedAt,
-          sourceUrl: plan.sourceUrl,
-        },
+        date,
+        entry,
+        calendarPlanDay,
+        calendarDate: formatDateOnly(new Date()),
+        planStartDate: PLAN_START_DATE,
+        checked,
+        mySuggestedPlanDay,
+        isToday: planDay === calendarPlanDay,
+        isFuture: planDay > calendarPlanDay,
       });
     } catch (e) {
-      return json(res, 500, { error: "無法載入讀經計劃：" + e.message });
+      return json(res, 500, { error: e.message });
+    }
+  }
+
+  if (pathname === "/api/scripture" && req.method === "GET") {
+    try {
+      const plan = await getReadingPlan();
+      const planDay = resolvePlanDay({
+        date: qs.get("date"),
+        planDay: qs.get("planDay"),
+      });
+      const entry = getDayEntry(plan, planDay);
+      if (!entry) return json(res, 404, { error: "找不到該日讀經" });
+      const scripture = await getFullScriptureForDay(entry);
+      return json(res, 200, { planDay, scripture });
+    } catch (e) {
+      return json(res, 500, { error: "無法載入經文：" + e.message });
     }
   }
 
@@ -128,17 +198,21 @@ async function handleApi(req, res, pathname) {
       return json(res, 401, { error: "請先使用 Gmail 登入" });
     }
     try {
+      const body = await parseBody(req);
       const plan = await getReadingPlan();
-      const planDay = getPlanDayForDate();
-      const todayStr = new Date().toISOString().slice(0, 10);
-      const exists = await findCheckinToday(user.id, todayStr);
+      const planDay = resolvePlanDay({
+        date: body.date,
+        planDay: body.planDay,
+      });
+      const exists = await findCheckinByUserPlanDay(user.id, planDay);
       if (exists) {
-        return json(res, 409, { error: "今日已完成打卡" });
+        return json(res, 409, { error: `第 ${planDay} 天已完成打卡` });
       }
       const entry = getDayEntry(plan, planDay);
       const record = {
         userId: user.id,
-        date: todayStr,
+        date: formatDateOnly(getDateForPlanDay(planDay)),
+        checkinDate: formatDateOnly(new Date()),
         planDay,
         oldTestament: entry?.oldTestament || "",
         newTestament: entry?.newTestament || "",
@@ -155,14 +229,13 @@ async function handleApi(req, res, pathname) {
     try {
       await archivePastMonths();
       const plan = await getReadingPlan();
-      const planDay = getPlanDayForDate();
-      const todayEntry = getDayEntry(plan, planDay);
+      const calendarPlanDay = getCalendarPlanDay();
       const users = await getUsers();
       const checkins = await getCheckins();
       const ym = monthKey();
       const leaderboard = buildLeaderboard(users, checkins, ym);
       const top3 = getTop3(leaderboard);
-      const progress = getAllProgress(users, checkins, planDay);
+      const progress = getAllProgress(users, checkins, calendarPlanDay);
       const winners = await getMonthlyWinners();
       const prevMonth = (() => {
         const d = new Date();
@@ -171,9 +244,17 @@ async function handleApi(req, res, pathname) {
       })();
       await ensureMonthlyWinnersRecorded(prevMonth);
 
+      let mySuggestedPlanDay = null;
+      if (user) {
+        const days = await getUserCheckinPlanDays(user.id);
+        mySuggestedPlanDay = getSuggestedPlanDay(days, calendarPlanDay);
+      }
+
       return json(res, 200, {
-        planDay,
-        today: todayEntry,
+        calendarPlanDay,
+        calendarDate: formatDateOnly(new Date()),
+        planStartDate: PLAN_START_DATE,
+        planBounds: getPlanBounds(),
         planMeta: {
           name: plan.name,
           updatedAt: plan.updatedAt,
@@ -184,6 +265,7 @@ async function handleApi(req, res, pathname) {
         allProgress: progress,
         monthlyWinners: winners.slice(-12).reverse(),
         currentUser: user || null,
+        mySuggestedPlanDay,
       });
     } catch (e) {
       return json(res, 500, { error: e.message });
@@ -251,7 +333,7 @@ async function bootstrap() {
   try {
     console.log("正在同步 365 天讀經計劃…");
     await getReadingPlan();
-    console.log("讀經計劃已就緒");
+    console.log(`讀經計劃已就緒（第 1 天：${PLAN_START_DATE}）`);
   } catch (e) {
     console.warn("讀經計劃載入警告:", e.message);
   }

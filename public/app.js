@@ -4,6 +4,14 @@ let auth = null;
 let currentUser = null;
 let userMap = {};
 let refreshTimer = null;
+let planBounds = null;
+let calendarPlanDay = 1;
+let calendarDate = "";
+let mySuggestedPlanDay = 1;
+let selectedDate = "";
+let currentDayData = null;
+let scriptureExpanded = false;
+let scriptureLoadedFor = null;
 
 const $ = (id) => document.getElementById(id);
 
@@ -26,14 +34,14 @@ function mapFirebaseError(err) {
     "auth/popup-blocked": "請允許彈出視窗後再試",
     "auth/account-exists-with-different-credential": "此 Email 已使用其他方式註冊",
     "auth/network-request-failed": "網路連線失敗",
-    "auth/unauthorized-domain": "此網域未授權，請在 Firebase 加入授權網域",
+    "auth/unauthorized-domain": `此網域未授權：請在 Firebase → Authentication → Settings → Authorized domains 新增「${location.hostname}」`,
   };
   return map[code] || err?.message || "登入失敗";
 }
 
-async function getIdToken() {
+async function getIdToken(forceRefresh = false) {
   if (!auth?.currentUser) return null;
-  return auth.currentUser.getIdToken();
+  return auth.currentUser.getIdToken(forceRefresh);
 }
 
 async function api(path, options = {}) {
@@ -85,43 +93,142 @@ function updateUserHeader(user) {
   $("user-email").textContent = user?.email || "";
 }
 
-$("google-login-btn").addEventListener("click", async () => {
-  $("auth-error").textContent = "";
-  const btn = $("google-login-btn");
-  btn.disabled = true;
-  setLoading(true);
+function formatZhDate(dateStr) {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  return `${y}年${m}月${d}日`;
+}
+
+function addDays(dateStr, delta) {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const dt = new Date(y, m - 1, d);
+  dt.setDate(dt.getDate() + delta);
+  return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
+}
+
+function clampDate(dateStr) {
+  if (!planBounds) return dateStr;
+  if (dateStr < planBounds.startDate) return planBounds.startDate;
+  if (dateStr > planBounds.endDate) return planBounds.endDate;
+  return dateStr;
+}
+
+function resetScripturePanel() {
+  scriptureExpanded = false;
+  scriptureLoadedFor = null;
+  $("scripture-toggle").setAttribute("aria-expanded", "false");
+  $("scripture-full").classList.add("hidden");
+  $("scripture-ot").innerHTML = "";
+  $("scripture-nt").innerHTML = "";
+  $("scripture-toggle").querySelector("span:last-child").textContent =
+    "展開當日完整經文";
+}
+
+function renderScriptureBlock(el, block, cssClass) {
+  if (!block) {
+    el.innerHTML = "";
+    return;
+  }
+  if (block.error) {
+    el.innerHTML = `<p class="scripture-error">${escapeHtml(block.error)}</p>`;
+    return;
+  }
+  const verses =
+    block.verses?.length > 0
+      ? block.verses
+          .map(
+            (v) =>
+              `<p class="scripture-verse"><span class="vn">${v.chap}:${v.sec}</span> ${escapeHtml(v.text)}</p>`
+          )
+          .join("")
+      : '<p class="meta-line">暫無經文內容</p>';
+  el.className = `scripture-block ${cssClass}`;
+  el.innerHTML = `<h3>${escapeHtml(block.title || block.label)}</h3>${verses}`;
+}
+
+async function loadScripture(planDay) {
+  $("scripture-loading").classList.remove("hidden");
   try {
-    const provider = new firebase.auth.GoogleAuthProvider();
-    provider.setCustomParameters({ prompt: "select_account" });
-    await auth.signInWithPopup(provider);
-  } catch (err) {
-    $("auth-error").textContent = mapFirebaseError(err);
+    const { scripture } = await api(`/api/scripture?planDay=${planDay}`);
+    renderScriptureBlock($("scripture-ot"), scripture.oldTestament, "");
+    renderScriptureBlock($("scripture-nt"), scripture.newTestament, "nt-block");
+    scriptureLoadedFor = planDay;
+  } catch (e) {
+    $("scripture-ot").innerHTML = `<p class="scripture-error">${escapeHtml(e.message)}</p>`;
+    $("scripture-nt").innerHTML = "";
   } finally {
-    btn.disabled = false;
-    setLoading(false);
+    $("scripture-loading").classList.add("hidden");
   }
-});
+}
 
-$("logout-btn").addEventListener("click", async () => {
-  await auth.signOut();
-  currentUser = null;
-  if (refreshTimer) clearInterval(refreshTimer);
-  showAuth();
-  showToast("已登出");
-});
+function renderDayView(day) {
+  currentDayData = day;
+  selectedDate = day.date;
 
-$("checkin-btn").addEventListener("click", async () => {
+  $("date-input").value = day.date;
+  $("date-input").min = planBounds?.startDate || day.planStartDate;
+  $("date-input").max = planBounds?.endDate || day.date;
+  $("plan-day").textContent = day.planDay;
+
+  const entry = day.entry;
+  $("ot-passage").textContent = entry?.oldTestament || "—";
+  $("nt-passage").textContent = entry?.newTestament || "—";
+
+  let title = formatZhDate(day.date);
+  if (day.isToday) title += "（今日）";
+  $("reading-title").textContent = title;
+  $("reading-eyebrow").textContent = day.isToday ? "今日讀經" : "讀經內容";
+
+  const hint = $("date-hint");
+  hint.className = "date-hint";
+  if (day.isFuture) {
+    hint.textContent = "超前閱讀（可預習並打卡）";
+    hint.classList.add("future");
+  } else if (day.planDay < calendarPlanDay && !day.checked) {
+    hint.textContent = "補讀／補打卡";
+    hint.classList.add("catchup");
+  } else if (day.checked) {
+    hint.textContent = "此日已完成打卡";
+  } else {
+    hint.textContent = `計劃第 1 天：${day.planStartDate}`;
+  }
+
   const btn = $("checkin-btn");
-  btn.disabled = true;
-  try {
-    await api("/api/checkin", { method: "POST" });
-    showToast("打卡成功！願主的話語成為您的力量");
-    await loadDashboard();
-  } catch (err) {
-    showToast(err.message);
+  const status = $("checkin-status");
+  const btnText = $("checkin-btn-text");
+
+  if (!currentUser) {
+    btn.disabled = true;
+    status.textContent = "請登入後打卡";
+    status.className = "badge";
+    btnText.textContent = "打卡";
+  } else if (day.checked) {
+    btn.disabled = true;
+    status.textContent = "此日已打卡 ✓";
+    status.className = "badge done";
+    btnText.textContent = "已打卡";
+  } else {
     btn.disabled = false;
+    status.textContent = day.isToday ? "今日尚未打卡" : "可補打卡";
+    status.className = "badge";
+    btnText.textContent = day.isToday ? "今日打卡" : `第 ${day.planDay} 天打卡`;
   }
-});
+
+  $("date-prev").disabled = day.date <= (planBounds?.startDate || day.date);
+  $("date-next").disabled = day.date >= (planBounds?.endDate || day.date);
+
+  if (scriptureLoadedFor !== day.planDay) {
+    resetScripturePanel();
+  }
+}
+
+async function loadDay(dateStr) {
+  const date = clampDate(dateStr);
+  const day = await api(`/api/day?date=${date}`);
+  if (day.mySuggestedPlanDay) mySuggestedPlanDay = day.mySuggestedPlanDay;
+  calendarPlanDay = day.calendarPlanDay;
+  renderDayView(day);
+  return day;
+}
 
 function buildUserMap(users) {
   userMap = {};
@@ -134,40 +241,25 @@ function getPhoto(userId) {
   return userMap[userId]?.photoURL || "";
 }
 
-function renderDashboard(data) {
+function renderDashboardStats(data) {
   currentUser = data.currentUser;
   buildUserMap(data.allProgress);
-
   updateUserHeader(currentUser);
 
-  $("plan-day").textContent = data.planDay;
-  $("ot-passage").textContent = data.today?.oldTestament || "—";
-  $("nt-passage").textContent = data.today?.newTestament || "—";
+  calendarPlanDay = data.calendarPlanDay;
+  calendarDate = data.calendarDate;
+  planBounds = data.planBounds;
+  if (data.mySuggestedPlanDay) mySuggestedPlanDay = data.mySuggestedPlanDay;
+
+  $("date-input").min = planBounds.startDate;
+  $("date-input").max = planBounds.endDate;
 
   const meta = data.planMeta;
   $("plan-meta").textContent = meta
-    ? `計劃：${meta.name || "一年讀一遍"} · 更新：${formatDate(meta.updatedAt)}`
+    ? `計劃：${meta.name || "一年讀一遍"} · 第 1 天 ${data.planStartDate} · 經文來源：信望愛聖經網`
     : "";
 
   const me = data.allProgress?.find((p) => p.userId === currentUser?.id);
-  const checked = me?.checkedToday;
-  const btn = $("checkin-btn");
-  const status = $("checkin-status");
-
-  if (!currentUser) {
-    btn.disabled = true;
-    status.textContent = "請登入後打卡";
-    status.className = "badge";
-  } else if (checked) {
-    btn.disabled = true;
-    status.textContent = "今日已打卡 ✓";
-    status.className = "badge done";
-  } else {
-    btn.disabled = false;
-    status.textContent = "尚未打卡";
-    status.className = "badge";
-  }
-
   const members = data.allProgress?.length || 0;
   const todayDone = data.allProgress?.filter((p) => p.checkedToday).length || 0;
   $("stat-members").textContent = members;
@@ -175,7 +267,7 @@ function renderDashboard(data) {
   $("stat-my-streak").textContent = me?.streak ?? "—";
   $("stat-my-total").textContent = me?.totalCheckins ?? "—";
 
-  renderTop3(data.monthlyTop3, data.leaderboard);
+  renderTop3(data.monthlyTop3);
   renderLeaderboard(data.leaderboard);
   renderProgress(data.allProgress);
   renderWinnersHistory(data.monthlyWinners);
@@ -205,7 +297,13 @@ function escapeAttr(s) {
     .replace(/</g, "&lt;");
 }
 
-function renderTop3(top3, fullList) {
+function escapeHtml(s) {
+  const d = document.createElement("div");
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+function renderTop3(top3) {
   const el = $("top3-podium");
   if (!top3?.length) {
     el.innerHTML = '<p class="meta-line">本月尚無打卡記錄</p>';
@@ -311,28 +409,131 @@ function renderWinnersHistory(winners) {
     .join("");
 }
 
-function escapeHtml(s) {
-  const d = document.createElement("div");
-  d.textContent = s;
-  return d.innerHTML;
-}
-
 async function loadDashboard() {
   const data = await api("/api/dashboard");
-  renderDashboard(data);
+  renderDashboardStats(data);
+  const dateToShow = selectedDate || calendarDate || data.calendarDate;
+  await loadDay(dateToShow);
 }
 
-async function enterDashboard() {
+$("google-login-btn").addEventListener("click", async () => {
+  $("auth-error").textContent = "";
+  const btn = $("google-login-btn");
+  btn.disabled = true;
   setLoading(true);
   try {
+    const provider = new firebase.auth.GoogleAuthProvider();
+    provider.setCustomParameters({ prompt: "select_account" });
+    const result = await auth.signInWithPopup(provider);
+    await result.user.getIdToken(true);
+    await enterDashboard();
+  } catch (err) {
+    if (err.message && !err.code) {
+      $("auth-error").textContent = err.message;
+    } else {
+      $("auth-error").textContent = mapFirebaseError(err);
+    }
+    showAuth();
+  } finally {
+    btn.disabled = false;
+    setLoading(false);
+  }
+});
+
+$("logout-btn").addEventListener("click", async () => {
+  await auth.signOut();
+  currentUser = null;
+  if (refreshTimer) clearInterval(refreshTimer);
+  showAuth();
+  showToast("已登出");
+});
+
+$("checkin-btn").addEventListener("click", async () => {
+  if (!currentDayData) return;
+  const btn = $("checkin-btn");
+  btn.disabled = true;
+  try {
+    await api("/api/checkin", {
+      method: "POST",
+      body: JSON.stringify({ planDay: currentDayData.planDay }),
+    });
+    showToast(`第 ${currentDayData.planDay} 天打卡成功！`);
+    await loadDashboard();
+  } catch (err) {
+    showToast(err.message);
+    btn.disabled = false;
+  }
+});
+
+$("date-input").addEventListener("change", async () => {
+  const v = $("date-input").value;
+  if (v) {
+    resetScripturePanel();
+    await loadDay(v);
+  }
+});
+
+$("date-prev").addEventListener("click", async () => {
+  if (!selectedDate) return;
+  resetScripturePanel();
+  await loadDay(addDays(selectedDate, -1));
+});
+
+$("date-next").addEventListener("click", async () => {
+  if (!selectedDate) return;
+  resetScripturePanel();
+  await loadDay(addDays(selectedDate, 1));
+});
+
+$("btn-today").addEventListener("click", async () => {
+  resetScripturePanel();
+  await loadDay(calendarDate);
+});
+
+$("btn-my-progress").addEventListener("click", async () => {
+  resetScripturePanel();
+  const day = await api(`/api/day?planDay=${mySuggestedPlanDay}`);
+  const date = day.date;
+  await loadDay(date);
+  showToast(
+    mySuggestedPlanDay <= calendarPlanDay
+      ? `已跳至第 ${mySuggestedPlanDay} 天（建議補讀）`
+      : `已跳至第 ${mySuggestedPlanDay} 天`
+  );
+});
+
+$("scripture-toggle").addEventListener("click", async () => {
+  scriptureExpanded = !scriptureExpanded;
+  $("scripture-toggle").setAttribute("aria-expanded", scriptureExpanded);
+  $("scripture-full").classList.toggle("hidden", !scriptureExpanded);
+  $("scripture-toggle").querySelector("span:last-child").textContent =
+    scriptureExpanded ? "收合當日完整經文" : "展開當日完整經文";
+
+  if (scriptureExpanded && currentDayData) {
+    if (scriptureLoadedFor !== currentDayData.planDay) {
+      await loadScripture(currentDayData.planDay);
+    }
+  }
+});
+
+let entering = false;
+
+async function enterDashboard() {
+  if (entering) return;
+  entering = true;
+  setLoading(true);
+  try {
+    await getIdToken(true);
     const { user } = await api("/api/auth/me");
     currentUser = user;
     showDashboard();
     updateUserHeader(user);
+    $("auth-error").textContent = "";
     await loadDashboard();
     if (refreshTimer) clearInterval(refreshTimer);
-    refreshTimer = setInterval(loadDashboard, 30000);
+    refreshTimer = setInterval(loadDashboard, 60000);
   } finally {
+    entering = false;
     setLoading(false);
   }
 }
@@ -343,12 +544,17 @@ async function initApp() {
     await initFirebase();
     auth.onAuthStateChanged(async (fbUser) => {
       if (fbUser) {
-        try {
-          await enterDashboard();
-        } catch (err) {
-          console.error(err);
-          showAuth();
-          $("auth-error").textContent = err.message || "載入失敗";
+        if ($("dashboard-view").classList.contains("hidden")) {
+          try {
+            await enterDashboard();
+          } catch (err) {
+            console.error(err);
+            await auth.signOut().catch(() => {});
+            showAuth();
+            $("auth-error").textContent =
+              err.message ||
+              "無法連線伺服器驗證登入，請檢查 Render 的 Firebase 環境變數";
+          }
         }
       } else {
         currentUser = null;
