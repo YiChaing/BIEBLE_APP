@@ -4,6 +4,7 @@ let auth = null;
 let currentUser = null;
 let userMap = {};
 let refreshTimer = null;
+const DASHBOARD_REFRESH_MS = 5 * 60 * 1000;
 let planBounds = null;
 let calendarPlanDay = 1;
 let calendarDate = "";
@@ -255,7 +256,6 @@ function renderDevotion(day) {
 async function loadDay(dateStr) {
   const date = clampDate(dateStr);
   const day = await api(`/api/day?date=${date}`);
-  if (day.mySuggestedPlanDay) mySuggestedPlanDay = day.mySuggestedPlanDay;
   calendarPlanDay = day.calendarPlanDay;
   renderDayView(day);
   return day;
@@ -471,10 +471,34 @@ $("google-login-btn").addEventListener("click", async () => {
   }
 });
 
+function stopDashboardRefresh() {
+  if (refreshTimer) {
+    clearInterval(refreshTimer);
+    refreshTimer = null;
+  }
+}
+
+function startDashboardRefresh() {
+  stopDashboardRefresh();
+  refreshTimer = setInterval(() => {
+    if (document.visibilityState === "visible") loadDashboard();
+  }, DASHBOARD_REFRESH_MS);
+}
+
+document.addEventListener("visibilitychange", () => {
+  if ($("dashboard-view").classList.contains("hidden")) return;
+  if (document.visibilityState === "visible") {
+    loadDashboard();
+    startDashboardRefresh();
+  } else {
+    stopDashboardRefresh();
+  }
+});
+
 $("logout-btn").addEventListener("click", async () => {
   await auth.signOut();
   currentUser = null;
-  if (refreshTimer) clearInterval(refreshTimer);
+  stopDashboardRefresh();
   showAuth();
   showToast("已登出");
 });
@@ -590,8 +614,7 @@ async function enterDashboard() {
     updateUserHeader(user);
     $("auth-error").textContent = "";
     await loadDashboard();
-    if (refreshTimer) clearInterval(refreshTimer);
-    refreshTimer = setInterval(loadDashboard, 60000);
+    startDashboardRefresh();
   } finally {
     entering = false;
     setLoading(false);

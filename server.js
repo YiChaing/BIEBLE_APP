@@ -8,7 +8,6 @@ const {
   getUsers,
   getCheckins,
   findCheckinByUserPlanDay,
-  getUserCheckinPlanDays,
   addCheckin,
   getDevotion,
   saveDevotion,
@@ -34,6 +33,7 @@ const {
   getMonthlyWinners,
   ensureMonthlyWinnersRecorded,
   getSuggestedPlanDay,
+  getUserPlanDaysFromCheckins,
 } = require("./lib/stats");
 
 const PORT = Number(process.env.PORT) || 3847;
@@ -154,13 +154,10 @@ async function handleApi(req, res, pathname) {
       const calendarPlanDay = getCalendarPlanDay();
 
       let checked = false;
-      let mySuggestedPlanDay = null;
       let devotion = null;
       if (user) {
         const existing = await findCheckinByUserPlanDay(user.id, planDay);
         checked = Boolean(existing);
-        const days = await getUserCheckinPlanDays(user.id);
-        mySuggestedPlanDay = getSuggestedPlanDay(days, calendarPlanDay);
         devotion = await getDevotion(user.id, planDay);
       }
 
@@ -172,7 +169,6 @@ async function handleApi(req, res, pathname) {
         calendarDate: formatDateOnly(new Date()),
         planStartDate: PLAN_START_DATE,
         checked,
-        mySuggestedPlanDay,
         devotion,
         isToday: planDay === calendarPlanDay,
         isFuture: planDay > calendarPlanDay,
@@ -249,26 +245,28 @@ async function handleApi(req, res, pathname) {
 
   if (pathname === "/api/dashboard" && req.method === "GET") {
     try {
-      await archivePastMonths();
       const plan = await getReadingPlan();
       const calendarPlanDay = getCalendarPlanDay();
-      const users = await getUsers();
-      const checkins = await getCheckins();
+      const [users, checkins, winners] = await Promise.all([
+        getUsers(),
+        getCheckins(),
+        getMonthlyWinners(),
+      ]);
+      await archivePastMonths(checkins, winners, users);
       const ym = monthKey();
       const leaderboard = buildLeaderboard(users, checkins, ym);
       const top3 = getTop3(leaderboard);
       const progress = getAllProgress(users, checkins, calendarPlanDay);
-      const winners = await getMonthlyWinners();
       const prevMonth = (() => {
         const d = new Date();
         d.setMonth(d.getMonth() - 1);
         return monthKey(d);
       })();
-      await ensureMonthlyWinnersRecorded(prevMonth);
+      await ensureMonthlyWinnersRecorded(prevMonth, { users, checkins, winners });
 
       let mySuggestedPlanDay = null;
       if (user) {
-        const days = await getUserCheckinPlanDays(user.id);
+        const days = getUserPlanDaysFromCheckins(checkins, user.id);
         mySuggestedPlanDay = getSuggestedPlanDay(days, calendarPlanDay);
       }
 
