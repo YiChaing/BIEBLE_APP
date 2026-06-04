@@ -5,13 +5,13 @@ const { URL } = require("url");
 const { isConfigured, getPublicConfig } = require("./lib/firebase-admin");
 const { getUserByToken } = require("./lib/auth");
 const {
-  getUsers,
-  getCheckins,
   findCheckinByUserPlanDay,
   addCheckin,
   getDevotion,
   saveDevotion,
 } = require("./lib/firestore");
+const { invalidateDashboardCache } = require("./lib/dashboard-cache");
+const { loadSharedDashboard } = require("./lib/dashboard-data");
 const {
   getReadingPlan,
   getPlanDayForDate,
@@ -25,13 +25,6 @@ const {
 } = require("./lib/plan");
 const { getFullScriptureForDay } = require("./lib/scripture");
 const {
-  monthKey,
-  buildLeaderboard,
-  getTop3,
-  archivePastMonths,
-  getAllProgress,
-  getMonthlyWinners,
-  ensureMonthlyWinnersRecorded,
   getSuggestedPlanDay,
   getUserPlanDaysFromCheckins,
 } = require("./lib/stats");
@@ -237,6 +230,7 @@ async function handleApi(req, res, pathname) {
         createdAt: new Date().toISOString(),
       };
       const saved = await addCheckin(record);
+      invalidateDashboardCache();
       return json(res, 201, { ok: true, checkin: saved });
     } catch (e) {
       return json(res, 500, { error: e.message });
@@ -245,50 +239,25 @@ async function handleApi(req, res, pathname) {
 
   if (pathname === "/api/dashboard" && req.method === "GET") {
     try {
-      const plan = await getReadingPlan();
-      const calendarPlanDay = getCalendarPlanDay();
-      const [users, checkins, winners] = await Promise.all([
-        getUsers(),
-        getCheckins(),
-        getMonthlyWinners(),
-      ]);
-      await archivePastMonths(checkins, winners, users);
-      const ym = monthKey();
-      const leaderboard = buildLeaderboard(users, checkins, ym);
-      const top3 = getTop3(leaderboard);
-      const progress = getAllProgress(users, checkins, calendarPlanDay);
-      const prevMonth = (() => {
-        const d = new Date();
-        d.setMonth(d.getMonth() - 1);
-        return monthKey(d);
-      })();
-      await ensureMonthlyWinnersRecorded(prevMonth, { users, checkins, winners });
+      const { data, stale, quotaExceeded } = await loadSharedDashboard();
 
       let mySuggestedPlanDay = null;
       if (user) {
-        const days = getUserPlanDaysFromCheckins(checkins, user.id);
-        mySuggestedPlanDay = getSuggestedPlanDay(days, calendarPlanDay);
+        const days = getUserPlanDaysFromCheckins(data.checkins, user.id);
+        mySuggestedPlanDay = getSuggestedPlanDay(days, data.calendarPlanDay);
       }
 
+      const { checkins: _c, ...shared } = data;
       return json(res, 200, {
-        calendarPlanDay,
-        calendarDate: formatDateOnly(new Date()),
-        planStartDate: PLAN_START_DATE,
-        planBounds: getPlanBounds(),
-        planMeta: {
-          name: plan.name,
-          updatedAt: plan.updatedAt,
-          sourceUrl: plan.sourceUrl,
-        },
-        leaderboard,
-        monthlyTop3: top3,
-        allProgress: progress,
-        monthlyWinners: winners.slice(-12).reverse(),
+        ...shared,
         currentUser: user || null,
         mySuggestedPlanDay,
+        cacheStale: stale || false,
+        quotaExceeded: quotaExceeded || false,
       });
     } catch (e) {
-      return json(res, 500, { error: e.message });
+      const status = e.code === "firestore/quota-exceeded" ? 503 : 500;
+      return json(res, status, { error: e.message, code: e.code });
     }
   }
 

@@ -3,8 +3,6 @@ const API = "";
 let auth = null;
 let currentUser = null;
 let userMap = {};
-let refreshTimer = null;
-const DASHBOARD_REFRESH_MS = 5 * 60 * 1000;
 let planBounds = null;
 let calendarPlanDay = 1;
 let calendarDate = "";
@@ -442,6 +440,11 @@ function renderWinnersHistory(winners) {
 
 async function loadDashboard() {
   const data = await api("/api/dashboard");
+  if (data.quotaExceeded) {
+    showToast("讀取已達今日上限，暫顯示快取資料");
+  } else if (data.cacheStale) {
+    showToast("暫顯示較舊的排行榜資料");
+  }
   renderDashboardStats(data);
   const dateToShow = selectedDate || calendarDate || data.calendarDate;
   await loadDay(dateToShow);
@@ -471,34 +474,22 @@ $("google-login-btn").addEventListener("click", async () => {
   }
 });
 
-function stopDashboardRefresh() {
-  if (refreshTimer) {
-    clearInterval(refreshTimer);
-    refreshTimer = null;
-  }
-}
-
-function startDashboardRefresh() {
-  stopDashboardRefresh();
-  refreshTimer = setInterval(() => {
-    if (document.visibilityState === "visible") loadDashboard();
-  }, DASHBOARD_REFRESH_MS);
-}
-
-document.addEventListener("visibilitychange", () => {
-  if ($("dashboard-view").classList.contains("hidden")) return;
-  if (document.visibilityState === "visible") {
-    loadDashboard();
-    startDashboardRefresh();
-  } else {
-    stopDashboardRefresh();
+$("refresh-dashboard-btn").addEventListener("click", async () => {
+  const btn = $("refresh-dashboard-btn");
+  btn.disabled = true;
+  try {
+    await loadDashboard();
+    showToast("已更新排行榜");
+  } catch (err) {
+    showToast(err.message);
+  } finally {
+    btn.disabled = false;
   }
 });
 
 $("logout-btn").addEventListener("click", async () => {
   await auth.signOut();
   currentUser = null;
-  stopDashboardRefresh();
   showAuth();
   showToast("已登出");
 });
@@ -614,7 +605,6 @@ async function enterDashboard() {
     updateUserHeader(user);
     $("auth-error").textContent = "";
     await loadDashboard();
-    startDashboardRefresh();
   } finally {
     entering = false;
     setLoading(false);
