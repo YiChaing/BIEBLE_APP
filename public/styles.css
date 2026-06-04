@@ -381,7 +381,7 @@ body {
 }
 
 .scripture-block h3 {
-  font-size: 1rem;
+  font-size: 1.15rem;
   color: var(--accent);
   margin-bottom: 0.75rem;
   padding-bottom: 0.35rem;
@@ -393,16 +393,16 @@ body {
 }
 
 .scripture-verse {
-  margin-bottom: 0.35rem;
-  font-size: 0.95rem;
-  line-height: 1.75;
+  margin-bottom: 0.45rem;
+  font-size: 1.2rem;
+  line-height: 1.9;
 }
 
 .scripture-verse .vn {
   display: inline-block;
-  min-width: 1.75rem;
+  min-width: 2rem;
   color: var(--muted);
-  font-size: 0.8rem;
+  font-size: 0.95rem;
   font-weight: 600;
 }
 
@@ -611,8 +611,8 @@ body {
 }
 
 .passage-text {
-  font-size: 1.05rem;
-  line-height: 1.75;
+  font-size: 1.25rem;
+  line-height: 1.85;
   font-weight: 500;
 }
 
