@@ -12,6 +12,25 @@ let currentDayData = null;
 let scriptureExpanded = false;
 let scriptureLoadedFor = null;
 
+// Client-side cache with 5-minute TTL for GET requests
+const _cache = new Map();
+const _CACHE_TTL = 5 * 60 * 1000;
+
+async function cachedGet(path) {
+  const now = Date.now();
+  const hit = _cache.get(path);
+  if (hit && now - hit.ts < _CACHE_TTL) return hit.data;
+  const data = await api(path);
+  _cache.set(path, { data, ts: now });
+  return data;
+}
+
+function invalidateCache(prefix) {
+  for (const key of _cache.keys()) {
+    if (key.startsWith(prefix)) _cache.delete(key);
+  }
+}
+
 const $ = (id) => document.getElementById(id);
 
 function showToast(msg) {
@@ -253,7 +272,7 @@ function renderDevotion(day) {
 
 async function loadDay(dateStr) {
   const date = clampDate(dateStr);
-  const day = await api(`/api/day?date=${date}`);
+  const day = await cachedGet(`/api/day?date=${date}`);
   calendarPlanDay = day.calendarPlanDay;
   renderDayView(day);
   return day;
@@ -362,6 +381,7 @@ function renderLeaderboard(list) {
     ul.innerHTML = '<li class="meta-line">尚無成員</li>';
     return;
   }
+  const max = list[0]?.monthlyCheckins || 1;
   ul.innerHTML = list
     .map((u, i) => {
       const rankClass =
@@ -370,12 +390,14 @@ function renderLeaderboard(list) {
       const av = photo
         ? `<img class="member-avatar" src="${escapeAttr(photo)}" alt="" loading="lazy" />`
         : `<span class="rank">${i + 1}</span>`;
+      const pct = Math.round((u.monthlyCheckins / max) * 100);
       return `
       <li>
         ${i < 3 ? `<span class="rank ${rankClass}">${i + 1}</span>` : av}
         ${i < 3 && photo ? `<img class="member-avatar" src="${escapeAttr(photo)}" alt="" />` : ""}
         <span class="member-name">${escapeHtml(u.displayName)}</span>
-        <span style="margin-left:auto;color:var(--muted);flex-shrink:0">${u.monthlyCheckins} 次</span>
+        <div class="lb-bar-wrap"><div class="lb-bar" style="--pct:${pct}%"></div></div>
+        <span class="lb-count">${u.monthlyCheckins}</span>
       </li>`;
     })
     .join("");
@@ -439,6 +461,12 @@ function renderWinnersHistory(winners) {
 }
 
 async function loadDashboard() {
+  // Fire dashboard and day requests in parallel when target date is already known
+  const dateHint = selectedDate || calendarDate;
+  const dayPromise = dateHint
+    ? cachedGet(`/api/day?date=${dateHint}`).catch(() => null)
+    : null;
+
   const data = await api("/api/dashboard");
   if (data.quotaExceeded) {
     showToast("讀取已達今日上限，暫顯示快取資料");
@@ -446,7 +474,16 @@ async function loadDashboard() {
     showToast("暫顯示較舊的排行榜資料");
   }
   renderDashboardStats(data);
+
   const dateToShow = selectedDate || calendarDate || data.calendarDate;
+  if (dayPromise) {
+    const day = await dayPromise;
+    if (day) {
+      calendarPlanDay = day.calendarPlanDay;
+      renderDayView(day);
+      return;
+    }
+  }
   await loadDay(dateToShow);
 }
 
@@ -533,6 +570,7 @@ $("checkin-btn").addEventListener("click", async () => {
       body: JSON.stringify({ planDay: currentDayData.planDay }),
     });
     showToast(`第 ${currentDayData.planDay} 天打卡成功！`);
+    invalidateCache(`/api/day?date=${selectedDate}`);
     await loadDashboard();
   } catch (err) {
     showToast(err.message);
@@ -615,6 +653,12 @@ async function initApp() {
   setLoading(true);
   try {
     await initFirebase();
+    // Prefetch plan-info so calendarDate is available before auth completes,
+    // enabling parallel dashboard+day loading on first page visit
+    api("/api/plan-info").then((info) => {
+      if (!calendarDate && info?.calendarDate) calendarDate = info.calendarDate;
+      if (!planBounds && info?.planBounds) planBounds = info.planBounds;
+    }).catch(() => {});
     auth.onAuthStateChanged(async (fbUser) => {
       if (fbUser) {
         if ($("dashboard-view").classList.contains("hidden")) {

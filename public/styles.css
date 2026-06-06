@@ -576,6 +576,18 @@ body {
   .btn-checkin {
     width: 100%;
   }
+
+  /* 最小觸控目標 44px（Apple HIG / Material Design 規範） */
+  .btn      { min-height: 44px; }
+  .btn-sm   { min-height: 44px; padding: 0.55rem 0.9rem; }
+  .btn-icon { width: 44px; height: 44px; }
+  .date-input { min-height: 44px; }
+
+  /* 手機版聖經全文字體加大、行距加寬 */
+  .scripture-verse {
+    font-size: 1.05rem;
+    line-height: 2;
+  }
 }
 
 .passage-box {
@@ -982,6 +994,48 @@ body {
     opacity: 1;
     transform: translateX(-50%) translateY(0);
   }
+}
+
+/* ── Skeleton loading ── */
+@keyframes skeleton-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.35; }
+}
+.skeleton {
+  display: inline-block;
+  background: var(--surface-border);
+  border-radius: 4px;
+  animation: skeleton-pulse 1.5s ease-in-out infinite;
+}
+.skel-title { width: 200px; height: 1.65rem; vertical-align: middle; }
+.skel-line  { display: block; height: 1.1em; margin-bottom: 0.45em; }
+.skel-full  { width: 100%; }
+.skel-mid   { width: 58%; }
+.skel-short { width: 32%; }
+
+/* ── 排行榜進度條 ── */
+.lb-bar-wrap {
+  flex: 1;
+  height: 5px;
+  background: rgba(255, 255, 255, 0.07);
+  border-radius: 3px;
+  overflow: hidden;
+  min-width: 36px;
+}
+.lb-bar {
+  height: 100%;
+  width: var(--pct, 0%);
+  background: linear-gradient(90deg, var(--accent-dim), var(--accent));
+  border-radius: 3px;
+  transition: width 0.6s ease;
+}
+.lb-count {
+  font-size: 0.8rem;
+  color: var(--muted);
+  white-space: nowrap;
+  min-width: 3ch;
+  text-align: right;
+  flex-shrink: 0;
 }
 
 .hidden {
