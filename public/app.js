@@ -664,12 +664,18 @@ async function initApp() {
       if (!calendarDate && info?.calendarDate) calendarDate = info.calendarDate;
       if (!planBounds && info?.planBounds) planBounds = info.planBounds;
     }).catch(() => {});
-    // Catch auth errors that arrive after signInWithRedirect on mobile
-    auth.getRedirectResult().catch((err) => {
+    // Must await getRedirectResult() so Firebase finishes processing the
+    // OAuth redirect before onAuthStateChanged evaluates auth state.
+    // Without await, the redirect result races with onAuthStateChanged
+    // and the user appears logged-out even after a successful redirect.
+    try {
+      await auth.getRedirectResult();
+    } catch (err) {
       $("auth-error").textContent = mapFirebaseError(err);
       showAuth();
       setLoading(false);
-    });
+      return;
+    }
     auth.onAuthStateChanged(async (fbUser) => {
       if (fbUser) {
         if ($("dashboard-view").classList.contains("hidden")) {
