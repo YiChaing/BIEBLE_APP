@@ -495,11 +495,8 @@ $("google-login-btn").addEventListener("click", async () => {
   try {
     const provider = new firebase.auth.GoogleAuthProvider();
     provider.setCustomParameters({ prompt: "select_account" });
-    // Mobile browsers block popups; use redirect flow instead
-    if (/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
-      await auth.signInWithRedirect(provider);
-      return; // page navigates away; finally runs but doesn't matter
-    }
+    // signInWithPopup is called synchronously from a user-gesture (click),
+    // so iOS Safari allows the popup — no async/await before this line.
     const result = await auth.signInWithPopup(provider);
     await result.user.getIdToken(true);
     await enterDashboard();
@@ -664,18 +661,10 @@ async function initApp() {
       if (!calendarDate && info?.calendarDate) calendarDate = info.calendarDate;
       if (!planBounds && info?.planBounds) planBounds = info.planBounds;
     }).catch(() => {});
-    // Must await getRedirectResult() so Firebase finishes processing the
-    // OAuth redirect before onAuthStateChanged evaluates auth state.
-    // Without await, the redirect result races with onAuthStateChanged
-    // and the user appears logged-out even after a successful redirect.
-    try {
-      await auth.getRedirectResult();
-    } catch (err) {
+    // Handle any leftover redirect result from a previous session attempt
+    auth.getRedirectResult().catch((err) => {
       $("auth-error").textContent = mapFirebaseError(err);
-      showAuth();
-      setLoading(false);
-      return;
-    }
+    });
     auth.onAuthStateChanged(async (fbUser) => {
       if (fbUser) {
         if ($("dashboard-view").classList.contains("hidden")) {
