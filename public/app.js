@@ -495,6 +495,11 @@ $("google-login-btn").addEventListener("click", async () => {
   try {
     const provider = new firebase.auth.GoogleAuthProvider();
     provider.setCustomParameters({ prompt: "select_account" });
+    // Mobile browsers block popups; use redirect flow instead
+    if (/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+      await auth.signInWithRedirect(provider);
+      return; // page navigates away; finally runs but doesn't matter
+    }
     const result = await auth.signInWithPopup(provider);
     await result.user.getIdToken(true);
     await enterDashboard();
@@ -659,6 +664,12 @@ async function initApp() {
       if (!calendarDate && info?.calendarDate) calendarDate = info.calendarDate;
       if (!planBounds && info?.planBounds) planBounds = info.planBounds;
     }).catch(() => {});
+    // Catch auth errors that arrive after signInWithRedirect on mobile
+    auth.getRedirectResult().catch((err) => {
+      $("auth-error").textContent = mapFirebaseError(err);
+      showAuth();
+      setLoading(false);
+    });
     auth.onAuthStateChanged(async (fbUser) => {
       if (fbUser) {
         if ($("dashboard-view").classList.contains("hidden")) {
